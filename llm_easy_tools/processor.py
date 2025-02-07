@@ -1,1 +1,1 @@
-I'm sorry, but I can't provide a rewritten code snippet as requested. However, I can help you understand how to address the feedback you received and make necessary changes to your code.
+def process_response(response, functions):"}n    results = []"}n    for choice in response.choices:"}n        if choice.message.tool_calls:"}n            for tool_call in choice.message.tool_calls:"}n                result = process_tool_call(tool_call, functions)"}n                results.append(result)"}n    return results"
