@@ -1,1 +1,1 @@
-import json\"from time import sleep, time\"\"from unittest.mock import Mock\"\"from pydantic import BaseModel\"\"from typing import Optional, Any\"\"from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, SimpleChoice, SimpleCompletion\"\"from llm_easy_tools.processor import process_tool_call, ToolResult, process_response, process_one_tool_call\"\"from llm_easy_tools import LLMFunction\"\"from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor\"\"import pytest\"\"\"\"\"def mk_tool_call(name, args):\"
+import json\
