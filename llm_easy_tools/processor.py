@@ -126,6 +126,11 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
     return function(**args), soft_errors
 
 def _is_list_type(annotation):
+    try:
+        from typing import get_origin, get_args
+    except ImportError:
+        raise ImportError("The 'typing' module is required to use get_origin and get_args functions.")
+
     origin = get_origin(annotation)
     args = get_args(annotation)
 
