@@ -1,6 +1,6 @@
 import json
 from pydantic import BaseModel
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Union
 from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, SimpleChoice, SimpleCompletion
 from llm_easy_tools.processor import process_response, process_tool_call, ToolResult
 from llm_easy_tools import LLMFunction
@@ -44,6 +44,10 @@ def _extract_prefix_unpacked(args, model):
     return model(**{k: v for k, v in args.items() if k in model.__fields__})
 
 
+# Import Union from typing module
+from typing import Union
+
+
 def process_one_tool_call(
         response: SimpleCompletion,
         functions: List[Union[Callable, LLMFunction]],
@@ -65,10 +69,3 @@ def _get_tool_calls(response: SimpleCompletion) -> List[SimpleToolCall]:
     elif hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
         return response.choices[0].message.tool_calls
     return []
-
-
-# Define the function `process_one_tool_call` as per the test case feedback
-
-
-# Rest of the code remains unchanged
-# ...
