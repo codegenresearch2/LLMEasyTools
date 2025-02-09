@@ -50,6 +50,7 @@ def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_i
     stack_trace = None
     prefix = None
     output = None
+    tool = None
     try:
         tool_args = json.loads(args)
     except json.decoder.JSONDecodeError as e:
@@ -72,7 +73,9 @@ def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_i
                 stack_trace = traceback.format_exc()
             break
     else:
-        error = NoMatchingTool(f"Function {tool_name} not found")
+        if tool is None:
+            error = NoMatchingTool(f"Function {tool_name} not found")
+
     result = ToolResult(
         tool_call_id=tool_call.id, 
         name=tool_name,
