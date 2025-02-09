@@ -131,6 +131,7 @@ def to_strict_json_schema(schema: dict) -> dict[str, Any]:
 
 
 def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict[str, Any]:
+    """Mutates the given JSON schema to ensure it conforms to the `strict` standard"""
     if not is_dict(json_schema):
         raise TypeError(f"Expected {json_schema} to be a dictionary; path={path}")
 
@@ -200,3 +201,4 @@ if __name__ == "__main__":
         altered_function,
         User
     ]))
+}
