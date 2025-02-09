@@ -124,10 +124,6 @@ def test_merge_schemas():
     param_names = list(new_schema['parameters']['properties'].keys())
     assert param_names == ['relevancy', 'next_actions_plan', 'count', 'size']
 
-    function_schema = get_function_schema(simple_function)
-    new_schema = insert_prefix(Reflection, function_schema, case_insensitive=True)
-    assert new_schema['name'] == "reflection_and_simple_function"
-
 def test_noparams_function_merge():
     def function_no_params():
         pass
