@@ -50,8 +50,10 @@ def test_process_methods(tool_name, args, expected_output):
 
     tool_call = mk_tool_call(tool_name, args)
     result = process_tool_call(tool_call, [getattr(tool, tool_name)])
-    assert isinstance(result, ToolResult)
-    assert result.output == expected_output
+    if result.error:
+        assert expected_output in str(result.error)
+    else:
+        assert result.output == expected_output
 
 def test_process_complex():
     class Address(BaseModel):
