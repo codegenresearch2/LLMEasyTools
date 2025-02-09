@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional, Union, Literal, Annotated, Callable, Dict, Any
+from typing import List, Optional, Union, Literal, Annotated, Callable, Dict, Any, get_origin, Type
 from typing_extensions import TypeGuard
 
 import copy
@@ -61,7 +61,9 @@ def get_tool_defs(
     return result
 
 
-def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]:
+import typing
+
+def parameters_basemodel_from_function(function: Callable) -> typing.Type[pd.BaseModel]:
     fields = {}
     parameters = inspect.signature(function).parameters
     function_globals = getattr(function, '__globals__', {})
@@ -132,13 +134,20 @@ def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive
 # copied from openai implementation which also uses Apache 2.0 license
 
 
+import typing
+
 def to_strict_json_schema(schema: dict) -> dict[str, Any]:
     return _ensure_strict_json_schema(schema, path=())
 
 
+import typing
+
+
+import typing
+
 def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict[str, Any]:
     """Mutates the given JSON schema to ensure it conforms to the `strict` standard"""
-    if not is_dict(json_schema):
+    if not isinstance(json_schema, dict):
         raise TypeError(f"Expected {json_schema} to be a dictionary; path={path}")
 
     typ = json_schema.get("type")
@@ -146,7 +155,7 @@ def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> di
         json_schema["additionalProperties"] = False
 
     properties = json_schema.get("properties")
-    if is_dict(properties):
+    if isinstance(properties, dict):
         json_schema["required"] = list(properties.keys())
         json_schema["properties"] = {
             key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key))
@@ -154,7 +163,7 @@ def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> di
         }
 
     items = json_schema.get("items")
-    if is_dict(items):
+    if isinstance(items, dict):
         json_schema["items"] = _ensure_strict_json_schema(items, path=(*path, "items"))
 
     any_of = json_schema.get("anyOf")
@@ -170,7 +179,7 @@ def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> di
         ]
 
     defs = json_schema.get("$defs")
-    if is_dict(defs):
+    if isinstance(defs, dict):
         for def_name, def_schema in defs.items():
             _ensure_strict_json_schema(def_schema, path=(*path, "$defs", def_name))
 
@@ -178,7 +187,10 @@ def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> di
 
 
 
+import typing
+
 def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
+    """Checks if the object is a dictionary."""
     return isinstance(obj, dict)
 
 
