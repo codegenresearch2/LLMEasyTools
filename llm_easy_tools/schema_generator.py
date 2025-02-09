@@ -109,7 +109,7 @@ def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive
     if case_insensitive:
         schema_name = schema_name.lower()
 
-    function_schema: dict[str, Any] = {
+    function_schema = {
         'name': schema_name,
         'description': description,
         'parameters': {}
