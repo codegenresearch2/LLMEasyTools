@@ -45,6 +45,40 @@ class ToolResult:
             "content": content,
         }
 
+# Define the get_origin function
+# This function is necessary for inspecting type annotations
+def get_origin(annotation):
+    return getattr(annotation, '__origin__', None)
+
+# Define the _is_list_type function
+# This function checks if the annotation is a list or a union of lists
+def _is_list_type(annotation):
+    origin = get_origin(annotation)
+    args = getattr(annotation, '__args__', ())
+    return origin is list or (origin is Union and any(_is_list_type(arg) for arg in args))
+
+# Define the _process_unpacked function
+# This function processes the arguments and returns the function output
+def _process_unpacked(function, tool_args={}, fix_json_args=True):
+    if isinstance(function, LLMFunction):
+        function = function.func
+    model = parameters_basemodel_from_function(function)
+    soft_errors = []
+    if fix_json_args:
+        for field, field_info in model.model_fields.items():
+            field_annotation = field_info.annotation
+            if _is_list_type(field_annotation):
+                if field in tool_args and isinstance(tool_args[field], str):
+                    tool_args[field] = split_string_to_list(tool_args[field])
+                    soft_errors.append(f"Fixed JSON decode error for field {field}")
+    model_instance = model(**tool_args)
+    args = {}
+    for field, _ in model.model_fields.items():
+        args[field] = getattr(model_instance, field)
+    return function(**args), soft_errors
+
+# Define the process_tool_call function
+# This function processes a tool call
 def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
     function_call = tool_call.function
     tool_name = function_call.name
@@ -105,53 +139,21 @@ def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_jso
     )
     return result
 
+# Define the split_string_to_list function
 def split_string_to_list(s: str) -> list[str]:
     try:
         return json.loads(s)
     except json.JSONDecodeError:
         return [item.strip() for item in s.split(',')]
 
-def _process_unpacked(function, tool_args={}, fix_json_args=True):
-    if isinstance(function, LLMFunction):
-        function = function.func
-    model = parameters_basemodel_from_function(function)
-    soft_errors = []
-    if fix_json_args:
-        for field, field_info in model.model_fields.items():
-            field_annotation = field_info.annotation
-            if _is_list_type(field_annotation):
-                if field in tool_args and isinstance(tool_args[field], str):
-                    tool_args[field] = split_string_to_list(tool_args[field])
-                    soft_errors.append(f"Fixed JSON decode error for field {field}")
-
-    model_instance = model(**tool_args)
-    args = {}
-    for field, _ in model.model_fields.items():
-        args[field] = getattr(model_instance, field)
-    return function(**args), soft_errors
-
-def _is_list_type(annotation):
-    origin = get_origin(annotation)
-    args = get_args(annotation)
-
-    if origin is list:
-        return True
-    elif origin is Union or origin is Optional:
-        return any(_is_list_type(arg) for arg in args)
-    return False
-
-def _extract_prefix_unpacked(tool_args, prefix_class):
-    prefix_args = {}
-    for key in list(tool_args.keys()):  # copy keys to list because we modify the dict while iterating over it
-        if key in prefix_class.__annotations__:
-            prefix_args[key] = tool_args.pop(key)
-    prefix = prefix_class(**prefix_args)
-    return prefix
-
+# Define the process_response function
+# This function processes a ChatCompletion response
 def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
     message = response.choices[choice_num].message
     return process_message(message, functions, **kwargs)
 
+# Define the process_message function
+# This function processes a ChatCompletionMessage
 def process_message(
     message: ChatCompletionMessage,
     functions: list[Union[Callable, LLMFunction]],
@@ -177,6 +179,8 @@ def process_message(
         results = list(map(lambda args: process_tool_call(*args), args_list))
     return results
 
+# Define the process_one_tool_call function
+# This function processes a single tool call from a ChatCompletion response at the specified index
 def process_one_tool_call(
         response: ChatCompletion,
         functions: list[Union[Callable, LLMFunction]],
