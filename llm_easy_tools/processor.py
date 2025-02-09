@@ -155,6 +155,7 @@ def _is_list_type(annotation):
     Returns:
         bool: True if the annotation is a list type, False otherwise.
     """
+    from typing import get_origin, get_args
     origin = get_origin(annotation)
     args = get_args(annotation)
 
