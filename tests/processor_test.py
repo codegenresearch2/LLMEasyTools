@@ -13,7 +13,7 @@ def mk_tool_call(name, args):
     arguments = json.dumps(args)
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
 
-def mk_tool_call_json(name, args):
+def mk_tool_call_jason(name, args):
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=args), type='function')
 
 def mk_chat_completion(tool_calls):
@@ -31,7 +31,7 @@ def mk_chat_completion(tool_calls):
     )
 
 @pytest.fixture
-def test_tool():
+def tool():
     class TestTool:
         def tool_method(self, arg: int) -> str:
             return f'executed tool_method with param: {arg}'
@@ -44,21 +44,21 @@ def test_tool():
 
     return TestTool()
 
-def test_process_methods(test_tool):
+def test_process_methods(tool):
     tool_call = mk_tool_call("tool_method", {"arg": 2})
-    result = process_tool_call(tool_call, [test_tool.tool_method])
+    result = process_tool_call(tool_call, [tool.tool_method])
     assert isinstance(result, ToolResult)
     assert result.output == 'executed tool_method with param: 2'
 
     tool_call = mk_tool_call("failing_method", {"arg": 2})
-    result = process_tool_call(tool_call, [test_tool.failing_method])
+    result = process_tool_call(tool_call, [tool.failing_method])
     assert isinstance(result, ToolResult)
     assert "Some exception" in str(result.error)
     message = result.to_message()
     assert "Some exception" in message['content']
 
     tool_call = mk_tool_call("no_output", {"arg": 2})
-    result = process_tool_call(tool_call, [test_tool.no_output])
+    result = process_tool_call(tool_call, [tool.no_output])
     assert isinstance(result, ToolResult)
     message = result.to_message()
     assert message['content'] == ''
@@ -106,7 +106,7 @@ def test_json_fix():
     json_data = json.dumps(original_user.model_dump())
     json_data = json_data[:-1]
     json_data = json_data + ',}'
-    tool_call = mk_tool_call_json("UserDetail", json_data)
+    tool_call = mk_tool_call_jason("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
