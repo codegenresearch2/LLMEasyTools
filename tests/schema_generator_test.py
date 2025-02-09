@@ -1,15 +1,8 @@
 import pytest
 from typing import List, Optional, Union, Literal, Annotated
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
-from pprint import pprint
-
-# Ensure the insert_prefix function is available
-try:
-    from llm_easy_tools import insert_prefix
-except ImportError:
-    pytest.skip("insert_prefix function not available", allow_module_level=True)
 
 def simple_function(count: int, size: Optional[float] = None):
     """simple function does something"""
@@ -135,7 +128,6 @@ def test_noparams_function_merge():
     function_schema = get_function_schema(function_no_params)
     assert function_schema['name'] == 'function_no_params'
     assert function_schema['parameters']['properties'] == {}
-    pprint(function_schema)
 
     new_schema = insert_prefix(Reflection, function_schema)
     assert len(new_schema['parameters']['properties']) == 2
