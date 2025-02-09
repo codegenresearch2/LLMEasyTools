@@ -3,7 +3,7 @@ import inspect
 import traceback
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from typing import Callable, Union, Optional, Any
+from typing import Callable, Union, Optional, Any, get_origin, get_args
 from pprint import pprint
 
 from pydantic import BaseModel, ValidationError
@@ -33,7 +33,7 @@ class ToolResult:
         if self.error is not None:
             content = f"{self.error}"
         elif self.output is None:
-            content = ''
+            content = ""
         elif isinstance(self.output, BaseModel):
             content = f"{self.name} created"
         else:
@@ -44,9 +44,6 @@ class ToolResult:
             "name": self.name,
             "content": content,
         }
-
-# Define or import the get_origin function
-# from typing import get_origin
 
 # Ensure that type annotations can be correctly processed
 def _is_list_type(annotation):
@@ -60,6 +57,7 @@ def _is_list_type(annotation):
     return False
 
 # Modify the response structure handling
+@get_name
 def process_response(response: dict, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
     message = response['choices'][choice_num]['message']
     return process_message(message, functions, **kwargs)
