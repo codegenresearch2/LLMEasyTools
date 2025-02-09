@@ -24,6 +24,20 @@ def test_function_schema():
     assert params_schema['type'] == "object"
     assert params_schema['properties']['count']['type'] == "integer"
     assert 'size' in params_schema['properties']
+    assert 'title' not in params_schema
+    assert 'title' not in params_schema['properties']['count']
+    assert 'description' not in params_schema
+
+    function_schema_no_doc = get_function_schema(simple_function_no_docstring)
+    assert function_schema_no_doc['name'] == 'simple_function_no_docstring'
+    assert function_schema_no_doc['description'] == ''
+    params_schema_no_doc = function_schema_no_doc['parameters']
+    assert len(params_schema_no_doc['properties']) == 2
+    assert params_schema_no_doc['type'] == "object"
+    assert params_schema_no_doc['properties']['apple']['type'] == "string"
+    assert params_schema_no_doc['properties']['banana']['type'] == "string"
+    assert 'title' not in params_schema_no_doc
+    assert 'description' not in params_schema_no_doc['properties']
 
 
 def test_noparams():
