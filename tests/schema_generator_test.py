@@ -1,7 +1,7 @@
 import pytest
-from typing import List, Optional, Union
-from pydantic import BaseModel, Field
-from llm_easy_tools import get_function_schema, LLMFunction
+from typing import List, Optional, Union, Annotated
+from pydantic import BaseModel, Field, field_validator
+from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, get_tool_defs
 from pprint import pprint
 
@@ -10,7 +10,7 @@ def simple_function(count: int, size: Optional[float] = None):
     pass
 
 @pytest.mark.xfail(reason="Local class not currently supported, needs investigation")
-def simple_function_no_docstring(apple: str, banana: str):
+def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Annotated[str, 'The banana']):
     pass
 
 def test_function_schema():
@@ -22,6 +22,8 @@ def test_function_schema():
     assert params_schema['type'] == "object"
     assert params_schema['properties']['count']['type'] == "integer"
     assert 'size' in params_schema['properties']
+    assert 'title' not in params_schema
+    assert 'description' not in params_schema
 
 def test_noparams():
     def function_with_no_params():
@@ -72,13 +74,13 @@ def test_merge_schemas():
         next_actions_plan: str = Field(..., description="What you plan to do next and why")
 
     function_schema = get_function_schema(simple_function)
-    new_schema = get_function_schema(Reflection, function_schema)
+    new_schema = insert_prefix(Reflection, function_schema)
     assert new_schema['name'] == "Reflection_and_simple_function"
     assert len(new_schema['parameters']['properties']) == 4
     assert len(new_schema['parameters']['required']) == 3
 
     function_schema = get_function_schema(simple_function)
-    new_schema = get_function_schema(Reflection, function_schema, case_insensitive=True)
+    new_schema = insert_prefix(Reflection, function_schema, case_insensitive=True)
     assert new_schema['name'] == "reflection_and_simple_function"
 
 def test_noparams_function_merge():
@@ -93,7 +95,7 @@ def test_noparams_function_merge():
     assert function_schema['name'] == 'function_no_params'
     assert function_schema['parameters']['properties'] == {}
 
-    new_schema = get_function_schema(Reflection, function_schema)
+    new_schema = insert_prefix(Reflection, function_schema)
     assert len(new_schema['parameters']['properties']) == 2
     assert new_schema['name'] == 'Reflection_and_function_no_params'
 
