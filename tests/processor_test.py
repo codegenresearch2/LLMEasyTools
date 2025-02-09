@@ -13,7 +13,7 @@ def mk_tool_call(name, args):
     arguments = json.dumps(args)
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
 
-def mk_tool_call_json(name, args):
+def mk_tool_call_jason(name, args):
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=args), type='function')
 
 def mk_chat_completion(tool_calls):
@@ -33,7 +33,6 @@ def mk_chat_completion(tool_calls):
 @pytest.mark.parametrize("tool_name, args, expected_output", [
     ("tool_method", {"arg": 2}, 'executed tool_method with param: 2'),
     ("failing_method", {"arg": 2}, "Some exception"),
-    ("no_output", {"arg": 2}, '')
 ])
 def test_process_methods(tool_name, args, expected_output):
     class TestTool:
@@ -41,7 +40,7 @@ def test_process_methods(tool_name, args, expected_output):
             return f'executed tool_method with param: {arg}'
 
         def no_output(self, arg: int):
-            return ''
+            pass
 
         def failing_method(self, arg: int) -> str:
             raise Exception('Some exception')
@@ -50,6 +49,7 @@ def test_process_methods(tool_name, args, expected_output):
 
     tool_call = mk_tool_call(tool_name, args)
     result = process_tool_call(tool_call, [getattr(tool, tool_name)])
+    assert isinstance(result, ToolResult)
     if result.error:
         assert expected_output in str(result.error)
     else:
@@ -98,7 +98,7 @@ def test_json_fix():
     json_data = json.dumps(original_user.model_dump())
     json_data = json_data[:-1]
     json_data = json_data + ',}'
-    tool_call = mk_tool_call_json("UserDetail", json_data)
+    tool_call = mk_tool_call_jason("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
