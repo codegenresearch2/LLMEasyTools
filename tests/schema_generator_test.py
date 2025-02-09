@@ -20,10 +20,6 @@ def simple_function(count: int, size: Optional[float] = None):
     pass
 
 
-def simple_function_no_docstring(apple: str, banana: str):
-    pass
-
-
 @pytest.mark.xfail(reason='Function not defined')
 # Assuming the function is not defined, this is a placeholder
 # def test_function_schema():
