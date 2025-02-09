@@ -144,7 +144,7 @@ def _extract_prefix_unpacked(tool_args, prefix_class):
     prefix = prefix_class(**prefix_args)
     return(prefix)
 
-def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
+def process_response(response: 'ChatCompletion', functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
     message = response.choices[choice_num].message
     return process_message(message, functions, **kwargs)
 
@@ -175,7 +175,7 @@ def process_message(
     return results
 
 def process_one_tool_call(
-        response: ChatCompletion,
+        response: 'ChatCompletion',
         functions: list[Union[Callable, LLMFunction]],
         index: int = 0,
         prefix_class=None,
@@ -188,7 +188,7 @@ def process_one_tool_call(
 
     return process_tool_call(tool_calls[index], functions, prefix_class, fix_json_args, case_insensitive)
 
-def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolCall]:
+def _get_tool_calls(response: 'ChatCompletion') -> list[ChatCompletionMessageToolCall]:
     if hasattr(response.choices[0].message, 'function_call') and (function_call := response.choices[0].message.function_call):
         return [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
     elif hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
@@ -197,6 +197,7 @@ def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolC
 
 if __name__ == "__main__":
     from llm_easy_tools.types import mk_chat_with_tool_call
+    from pprint import pprint
 
     def original_function():
         return 'Result of function_decorated'
@@ -213,13 +214,13 @@ if __name__ == "__main__":
         name: str
         email: str
 
-    print(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
+    pprint(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
     call_to_altered_name = mk_chat_with_tool_call('altered_name', {}).choices[0].message.tool_calls[0]
-    print(call_to_altered_name)
-    print(process_tool_call(call_to_altered_name, [function_decorated]))
+    pprint(call_to_altered_name)
+    pprint(process_tool_call(call_to_altered_name, [function_decorated]))
 
     call_to_simple_method = mk_chat_with_tool_call('simple_method', {"count": 1, "size": 2.2}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_simple_method, [example_object.simple_method]))
+    pprint(process_tool_call(call_to_simple_method, [example_object.simple_method]))
 
     call_to_model = mk_chat_with_tool_call('User', {"name": 'John', "email": 'john@example.com'}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_model, [User]))
+    pprint(process_tool_call(call_to_model, [User]))
