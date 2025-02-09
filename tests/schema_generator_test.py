@@ -1,8 +1,9 @@
 import pytest
 from typing import List, Optional, Union, Literal, Annotated
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
+from pprint import pprint
 
 def simple_function(count: int, size: Optional[float] = None):
     """simple function does something"""
