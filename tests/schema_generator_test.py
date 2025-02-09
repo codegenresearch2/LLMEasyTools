@@ -15,7 +15,7 @@ def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Ann
     pass
 
 
-def insert_prefix(model: BaseModel, schema: dict, prefix: str = "_"):
+def insert_prefix(model: BaseModel, schema: dict, prefix: str = ""):
     """
     Inserts a prefix to the name of the function schema.
     
