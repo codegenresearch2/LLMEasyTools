@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import Mock
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from typing import Optional
 from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, _extract_prefix_unpacked, process_one_tool_call
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
