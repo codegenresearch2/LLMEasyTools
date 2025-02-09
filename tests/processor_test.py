@@ -1,10 +1,12 @@
 import pytest
+import json
+from time import sleep
+from unittest.mock import Mock
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, _extract_prefix_unpacked, process_one_tool_call
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-import json
 
 def mk_tool_call(name, args):
     arguments = json.dumps(args)
@@ -152,8 +154,7 @@ def test_parallel_tools():
 
         def increment_counter(self):
             self.counter += 1
-            import time
-            time.sleep(1)  # Increased sleep duration to 1 second
+            sleep(1)
 
     counter = CounterClass()
     tool_call = mk_tool_call("increment_counter", {})
