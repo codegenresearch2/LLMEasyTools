@@ -5,6 +5,9 @@ from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, 
 from llm_easy_tools.processor import process_response, process_tool_call, ToolResult
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from time import sleep, time
+from unittest.mock import Mock
+from pydantic import ValidationError
 
 
 def mk_tool_call(name, args):
@@ -35,6 +38,10 @@ class TestTool:
 
     def failing_method(self, arg: int) -> str:
         raise Exception('Some exception')
+
+
+def _extract_prefix_unpacked(args, model):
+    return model(**{k: v for k, v in args.items() if k in model.__fields__})
 
 
 def test_process_methods():
@@ -181,10 +188,8 @@ def test_process_one_tool_call():
         name: str
         age: int
 
-    response = mk_chat_completion([
-        mk_tool_call('User', {'name': 'Alice', 'age': 30}),
-        mk_tool_call('User', {'name': 'Bob', 'age': 25})
-    ])
+    response = mk_chat_completion([mk_tool_call('User', {'name': 'Alice', 'age': 30}),
+                                   mk_tool_call('User', {'name': 'Bob', 'age': 25})])
 
     result = process_one_tool_call(response, [User], index=0)
     assert isinstance(result, ToolResult)
