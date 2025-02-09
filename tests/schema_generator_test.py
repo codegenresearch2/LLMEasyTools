@@ -15,6 +15,22 @@ def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Ann
     pass
 
 
+def insert_prefix(model: BaseModel, schema: dict, prefix: str = "_"):
+    """
+    Inserts a prefix to the name of the function schema.
+    
+    Args:
+        model (BaseModel): The Pydantic model to be prefixed.
+        schema (dict): The function schema to which the prefix will be added.
+        prefix (str): The prefix to be added to the schema name.
+        
+    Returns:
+        dict: The updated function schema with the prefixed name.
+    """
+    schema['name'] = f"{prefix}{schema['name']}"
+    return schema
+
+
 def test_function_schema():
     function_schema = get_function_schema(simple_function)
     assert function_schema['name'] == 'simple_function'
