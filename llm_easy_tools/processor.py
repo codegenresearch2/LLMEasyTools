@@ -45,16 +45,14 @@ class ToolResult:
             "content": content,
         }
 
-# Define the get_origin function
-# This function is necessary for inspecting type annotations
-def get_origin(annotation):
-    return getattr(annotation, '__origin__', None)
+# Use get_origin and get_args from typing
+from typing import get_origin, get_args
 
 # Define the _is_list_type function
 # This function checks if the annotation is a list or a union of lists
 def _is_list_type(annotation):
     origin = get_origin(annotation)
-    args = getattr(annotation, '__args__', ())
+    args = get_args(annotation)
     return origin is list or (origin is Union and any(_is_list_type(arg) for arg in args))
 
 # Define the _process_unpacked function
@@ -79,65 +77,33 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
 
 # Define the process_tool_call function
 # This function processes a tool call
-def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
-    function_call = tool_call.function
-    tool_name = function_call.name
-    args = function_call.arguments
-    soft_errors: list[Exception] = []
-    error = None
-    stack_trace = None
-    prefix = None
-    output = None
-    try:
-        tool_args = json.loads(args)
-    except json.decoder.JSONDecodeError as e:
-        if fix_json_args:
-            soft_errors.append(e)
-            args = args.replace(', }', '}').replace(',}', '}')
-            tool_args = json.loads(args)
+@dataclass
+class ToolResult:
+    tool_call_id: str
+    name: str
+    output: Optional[Any] = None
+    arguments: Optional[dict[str, Any]] = None
+    error: Optional[Exception] = None
+    stack_trace: Optional[str] = None
+    soft_errors: list[Exception] = field(default_factory=list)
+    prefix: Optional[BaseModel] = None
+    tool: Optional[Union[Callable, BaseModel]] = None
+
+    def to_message(self) -> dict[str, str]:
+        if self.error is not None:
+            content = f"{self.error}"
+        elif self.output is None:
+            content = ""
+        elif isinstance(self.output, BaseModel):
+            content = f"{self.name} created"
         else:
-            stack_trace = traceback.format_exc()
-            return ToolResult(tool_call_id=tool_call.id, name=tool_name, error=e, stack_trace=stack_trace)
-
-    if prefix_class is not None:
-        try:
-            prefix = _extract_prefix_unpacked(tool_args, prefix_class)
-        except ValidationError as e:
-            soft_errors.append(e)
-        prefix_name = prefix_class.__name__
-        if case_insensitive:
-            prefix_name = prefix_name.lower()
-        if not tool_name.startswith(prefix_name):
-            soft_errors.append(NoMatchingTool(f"Trying to decode function call with a name '{tool_name}' not matching prefix '{prefix_name}'"))
-        else:
-            tool_name = tool_name[len(prefix_name + '_and_'):]
-
-    tool = None
-
-    for f in functions_or_models:
-        if get_name(f, case_insensitive=case_insensitive) == tool_name:
-            tool = f
-            try:
-                output, new_soft_errors = _process_unpacked(f, tool_args, fix_json_args=fix_json_args)
-                soft_errors.extend(new_soft_errors)
-            except Exception as e:
-                error = e
-                stack_trace = traceback.format_exc()
-            break
-    else:
-        error = NoMatchingTool(f"Function {tool_name} not found")
-    result = ToolResult(
-        tool_call_id=tool_call.id,
-        name=tool_name,
-        arguments=tool_args,
-        output=output,
-        error=error,
-        stack_trace=stack_trace,
-        soft_errors=soft_errors,
-        prefix=prefix,
-        tool=tool,
-    )
-    return result
+            content = str(self.output)
+        return {
+            "role": "tool",
+            "tool_call_id": self.tool_call_id,
+            "name": self.name,
+            "content": content,
+        }
 
 # Define the split_string_to_list function
 def split_string_to_list(s: str) -> list[str]:
