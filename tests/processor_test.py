@@ -13,7 +13,7 @@ def mk_tool_call(name, args):
     arguments = json.dumps(args)
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
 
-def mk_tool_call_jason(name, args):
+def mk_tool_call_json(name, args):
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=args), type='function')
 
 def mk_chat_completion(tool_calls):
@@ -82,7 +82,7 @@ def test_process_complex():
 
 def test_prefixing():
     class Reflection(BaseModel):
-        relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
+        relevancy: str = Field(..., description="Relevance of the last retrieved information")
 
     args = { 'relevancy': 'good', 'name': 'hammer'}
     prefix = Reflection(**args)
@@ -98,7 +98,7 @@ def test_json_fix():
     json_data = json.dumps(original_user.model_dump())
     json_data = json_data[:-1]
     json_data = json_data + ',}'
-    tool_call = mk_tool_call_jason("UserDetail", json_data)
+    tool_call = mk_tool_call_json("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
