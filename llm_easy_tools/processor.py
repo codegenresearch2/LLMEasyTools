@@ -124,7 +124,7 @@ if __name__ == "__main__":
         name: str
         email: str
 
-    pprint(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
+    pprint(process_response(mk_chat_with_tool_call('altered_name', {})))
     call_to_altered_name = mk_chat_with_tool_call('altered_name', {}).choices[0].message.tool_calls[0]
     pprint(call_to_altered_name)
     pprint(process_tool_call(call_to_altered_name, [function_decorated]))
