@@ -1,193 +1,234 @@
-import pytest
+import inspect
+from typing import List, Optional, Union, Literal, Annotated, Callable, Dict, Any, get_origin, Type
+from typing_extensions import TypeGuard
 
-from typing import List, Optional, Union, Literal, Annotated
-from pydantic import BaseModel, Field, field_validator
-
-from llm_easy_tools import get_function_schema, LLMFunction
-from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
+import copy
+import pydantic as pd
+from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
 
 from pprint import pprint
+import sys
 
 
-def simple_function(count: int, size: Optional[float] = None):
-    """simple function does something"""
-    pass
+class LLMFunction:
+    def __init__(self, func, schema=None, name=None, description=None, strict=False):
+        self.func = func
+        self.__name__ = func.__name__
+        self.__doc__ = func.__doc__
+        self.__module__ = func.__module__
+
+        if schema:
+            self.schema = schema
+            if name or description:
+                raise ValueError("Cannot specify name or description when providing a complete schema")
+        else:
+            self.schema = get_function_schema(func, strict=strict)
+
+            if name:
+                self.schema['name'] = name
+
+            if description:
+                self.schema['description'] = description
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
 
 
-def simple_function_no_docstring(
-        apple: Annotated[str, 'The apple'],
-        banana: Annotated[str, 'The banana']
-):
-    pass
+def tool_def(function_schema: dict) -> dict:
+    return {
+        "type": "function",
+        "function": function_schema,
+    }
+
+
+def get_tool_defs(
+        functions: list[Union[Callable, LLMFunction]],
+        case_insensitive: bool = False,
+        prefix_class: Union[Type[BaseModel], None] = None,
+        prefix_schema_name: bool = True,
+        strict: bool = False
+        ) -> list[dict]:
+    result = []
+    for function in functions:
+        if isinstance(function, LLMFunction):
+            fun_schema = function.schema
+        else:
+            fun_schema = get_function_schema(function, case_insensitive)
+
+        if prefix_class:
+            fun_schema = insert_prefix(prefix_class, fun_schema, prefix_schema_name, case_insensitive)
+        result.append(tool_def(fun_schema))
+    return result
+
+
+def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]:
+    fields = {}
+    parameters = inspect.signature(function).parameters
+    function_globals = getattr(function, '__globals__', {})
+
+    for name, parameter in parameters.items():
+        description = None
+        type_ = parameter.annotation
+        if type_ is inspect._empty:
+            raise ValueError(f"Parameter '{name}' has no type annotation")
+        if get_origin(type_) is Annotated:
+            if type_.__metadata__:
+                description = type_.__metadata__[0]
+            type_ = type_.__args__[0]
+        default = PydanticUndefined if parameter.default is inspect.Parameter.empty else parameter.default
+        fields[name] = (type_, pd.Field(default, description=description))
+    return pd.create_model(f'{function.__name__}_ParameterModel', **fields)
+
+
+def _recursive_purge_titles(d: Dict[str, Any]) -> None:
+    if isinstance(d, dict):
+        for key in list(d.keys()):
+            if key == 'title' and "type" in d.keys():
+                del d[key]
+            else:
+                _recursive_purge_titles(d[key])
+
+
+def get_name(func: Union[Callable, LLMFunction], case_insensitive: bool = False) -> str:
+    if isinstance(func, LLMFunction):
+        schema_name = func.schema['name']
+    else:
+        schema_name = func.__name__
+
+    if case_insensitive:
+        schema_name = schema_name.lower()
+    return schema_name
+
+
+def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict:
+    if isinstance(function, LLMFunction):
+        if case_insensitive:
+            raise ValueError("Cannot case insensitive for LLMFunction")
+        return function.schema
+
+    description = '' if function.__doc__ is None else function.__doc__.strip()
+
+    schema_name = function.__name__
+    if case_insensitive:
+        schema_name = schema_name.lower()
+
+    function_schema: dict[str, Any] = {
+        'name': schema_name,
+        'description': description,
+    }
+    model = parameters_basemodel_from_function(function)
+    model_json_schema = model.model_json_schema()
+    if strict:
+        model_json_schema = to_strict_json_schema(model_json_schema)
+        function_schema['strict'] = True
+    else:
+        _recursive_purge_titles(model_json_schema)
+    function_schema['parameters'] = model_json_schema
+
+    return function_schema
+
+
+# copied from openai implementation which also uses Apache 2.0 license
+
+
+def to_strict_json_schema(schema: dict) -> dict[str, Any]:
+    return _ensure_strict_json_schema(schema, path=())
+
+
+def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict[str, Any]:
+    if not is_dict(json_schema):
+        raise TypeError(f"Expected {json_schema} to be a dictionary; path={path}")
+
+    typ = json_schema.get("type")
+    if typ == "object" and "additionalProperties" not in json_schema:
+        json_schema["additionalProperties"] = False
+
+    properties = json_schema.get("properties")
+    if is_dict(properties):
+        json_schema["required"] = list(properties.keys())
+        json_schema["properties"] = {
+            key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key))
+            for key, prop_schema in properties.items()
+        }
+
+    items = json_schema.get("items")
+    if is_dict(items):
+        json_schema["items"] = _ensure_strict_json_schema(items, path=(*path, "items"))
+
+    any_of = json_schema.get("anyOf")
+    if isinstance(any_of, list):
+        json_schema["anyOf"] = [
+            _ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i))) for i, variant in enumerate(any_of)
+        ]
+
+    all_of = json_schema.get("allOf")
+    if isinstance(all_of, list):
+        json_schema["allOf"] = [
+            _ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i))) for i, entry in enumerate(all_of)
+        ]
+
+    defs = json_schema.get("$defs")
+    if is_dict(defs):
+        for def_name, def_schema in defs.items():
+            _ensure_strict_json_schema(def_schema, path=(*path, "$defs", def_name))
+
+    return json_schema
 
 
 
-def test_function_schema():
-    function_schema = get_function_schema(simple_function)
-    assert function_schema['name'] == 'simple_function'
-    assert function_schema['description'] == 'simple function does something'
-    params_schema = function_schema['parameters']
-    assert len(params_schema['properties']) == 2
-    assert params_schema['type'] == "object"
-    assert params_schema['properties']['count']['type'] == "integer"
-    assert 'size' in params_schema['properties']
-    assert 'title' not in params_schema
-    assert 'title' not in params_schema['properties']['count']
-    assert 'description' not in params_schema
+def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(obj, dict)
 
 
-def test_noparams():
-    def function_with_no_params():
+def insert_prefix(prefix_class, schema, prefix_schema_name=True, case_insensitive = False):
+    if not issubclass(prefix_class, BaseModel):
+        raise TypeError(
+            f"The given class reference is not a subclass of pydantic BaseModel"
+        )
+    prefix_schema = prefix_class.model_json_schema()
+    _recursive_purge_titles(prefix_schema)
+    prefix_schema.pop('description', '')
+
+    new_schema = copy.copy(schema)  # Create a shallow copy of the schema
+    new_schema['parameters'] = prefix_schema
+    if len(new_schema['parameters']['properties']) == 0:  # If the parameters list is empty
+        new_schema.pop('parameters')
+    if prefix_schema_name:
+        if case_insensitive:
+            prefix_name = prefix_class.__name__.lower()
+        else:
+            prefix_name = prefix_class.__name__
+        new_schema['name'] = prefix_name + "_" + schema['name']
+    return new_schema
+
+
+#######################################
+# Examples
+
+if __name__ == "__main__":
+    def function_with_doc():
         """
-        This function has a docstring and takes no parameters.
+        This function has a docstring and no parameters.
         """
         pass
 
-    def function_no_doc():
-        pass
+    altered_function = LLMFunction(function_with_doc, name="altered_name")
 
-    result = get_function_schema(function_with_no_params)
-    assert result['name'] == 'function_with_no_params'
-    assert result['description'] == "This function has a docstring and takes no parameters."
-    assert result['parameters']['properties'] == {}
-
-    result = get_function_schema(function_no_doc)
-    assert result['name'] == 'function_no_doc'
-    assert result['description'] == ""
-    assert result['parameters']['properties'] == {}
-
-
-def test_nested():
-    class Foo(BaseModel):
-        count: int
-        size: Optional[float] = None
-
-    class Bar(BaseModel):
-        """Some Bar"""
-        apple: str = Field(description="The apple")
-        banana: str = Field(description="The banana")
-
-    class FooAndBar(BaseModel):
-        foo: Foo
-        bar: Bar
-
-    def nested_structure_function(foo: Foo, bars: List[Bar]):
-        """spams everything"""
-        pass
-
-    function_schema = get_function_schema(nested_structure_function)
-    assert function_schema['name'] == 'nested_structure_function'
-    assert function_schema['description'] == 'spams everything'
-    assert len(function_schema['parameters']['properties']) == 2
-
-    function_schema = get_function_schema(FooAndBar)
-    assert function_schema['name'] == 'FooAndBar'
-    assert len(function_schema['parameters']['properties']) == 2
-
-
-def test_methods():
     class ExampleClass:
-        def simple_method(self, count: int, size: Optional[float] = None):
+        def simple_method(self, count: int, size: float):
             """simple method does something"""
             pass
 
     example_object = ExampleClass()
 
-    function_schema = get_function_schema(example_object.simple_method)
-    assert function_schema['name'] == 'simple_method'
-    assert function_schema['description'] == 'simple method does something'
-    params_schema = function_schema['parameters']
-    assert len(params_schema['properties']) == 2
-
-
-def test_LLMFunction():
-    def new_simple_function(count: int, size: Optional[float] = None):
-        """simple function does something"""
-        pass
-
-    func = LLMFunction(new_simple_function, name='changed_name')
-    function_schema = func.schema
-    assert function_schema['name'] == 'changed_name'
-    assert 'strict' not in function_schema or function_schema['strict'] == False
-
-    func = LLMFunction(simple_function, strict=True)
-    function_schema = func.schema
-    assert function_schema['strict'] == True
-
-
-def test_model_init_function():
     class User(BaseModel):
-        """A user object"""
         name: str
-        city: str
+        age: int
 
-    function_schema = get_function_schema(User)
-    assert function_schema['name'] == 'User'
-    assert function_schema['description'] == 'A user object'
-    assert len(function_schema['parameters']['properties']) == 2
-    assert len(function_schema['parameters']['required']) == 2
-
-    new_function = LLMFunction(User, name="extract_user_details")
-    assert new_function.schema['name'] == 'extract_user_details'
-    assert new_function.schema['description'] == 'A user object'
-    assert len(new_function.schema['parameters']['properties']) == 2
-    assert len(new_function.schema['parameters']['required']) == 2
-
-
-def test_case_insensitivity():
-    class User(BaseModel):
-        """A user object"""
-        name: str
-        city: str
-
-    function_schema = get_function_schema(User, case_insensitive=True)
-    assert function_schema['name'] == 'user'
-    assert get_name(User, case_insensitive=True) == 'user'
-
-
-def test_function_no_type_annotation():
-    def function_with_missing_type(param):
-        return f"Value is {param}"
-
-    with pytest.raises(ValueError) as exc_info:
-        get_function_schema(function_with_missing_type)
-    assert str(exc_info.value) == "Parameter 'param' has no type annotation"
-
-
-def test_pydantic_param():
-    class Query(BaseModel):
-        query: str
-        region: str
-
-    def search(query: Query):
-        ...
-
-    schema = get_tool_defs([search])
-    assert schema[0]['function']['name'] == 'search'
-    assert schema[0]['function']['description'] == ""
-    assert schema[0]['function']['parameters']['properties']['query']['$ref'] == '#/$defs/Query'
-
-
-def test_strict():
-    class Address(BaseModel):
-        street: str
-        city: str
-
-    class Company(BaseModel):
-        name: str
-        speciality: str
-        addresses: List[Address]
-
-    def print_companies(companies: List[Company]):
-        ...
-
-    schema = get_tool_defs([print_companies], strict=True)
-    pprint(schema)
-
-    function_schema = schema[0]['function']
-    assert function_schema['name'] == 'print_companies'
-    assert function_schema['strict'] == True
-    assert function_schema['parameters']['additionalProperties'] == False
-    assert function_schema['parameters']['$defs']['Address']['additionalProperties'] == False
-    assert function_schema['parameters']['$defs']['Address']['properties']['street']['type'] == 'string'
-    assert function_schema['parameters']['$defs']['Company']['additionalProperties'] == False
+    pprint(get_tool_defs([
+        example_object.simple_method,
+        function_with_doc,
+        altered_function,
+        User
+    ]))
