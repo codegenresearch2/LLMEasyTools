@@ -43,6 +43,7 @@ class ToolResult:
 
 # Ensure ChatCompletion is defined or imported correctly
 
+"""Processes a tool call based on the provided tool call and functions."""
 def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
     function_call = tool_call.function
     tool_name = function_call.name
