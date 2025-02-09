@@ -1,8 +1,7 @@
 import json
-import inspect
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from typing import Callable, Union, Optional, Any, get_origin, get_args
+from typing import Callable, Union, Optional, Any
 from pydantic import BaseModel, ValidationError
 from dataclasses import dataclass, field
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
@@ -42,6 +41,18 @@ class ToolResult:
         }
 
 def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_insensitive=False) -> ToolResult:
+    """
+    Processes a tool call from a ChatCompletion response.
+
+    Args:
+        tool_call (ChatCompletionMessageToolCall): The tool call object.
+        functions_or_models (list): A list of functions or Pydantic models to match against the tool call.
+        fix_json_args (bool): Whether to attempt to fix JSON decoding errors in arguments.
+        case_insensitive (bool): Whether to perform a case-insensitive match for tool names.
+
+    Returns:
+        ToolResult: A ToolResult object containing the result of the tool call.
+    """
     function_call = tool_call.function
     tool_name = function_call.name
     args = function_call.arguments
@@ -51,6 +62,7 @@ def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_i
     prefix = None
     output = None
     tool = None
+
     try:
         tool_args = json.loads(args)
     except json.decoder.JSONDecodeError as e:
@@ -89,12 +101,32 @@ def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_i
     return result
 
 def split_string_to_list(s: str) -> list[str]:
+    """
+    Converts a string representation of a list into an actual list.
+
+    Args:
+        s (str): The string to convert.
+
+    Returns:
+        list[str]: The list representation of the string.
+    """
     try:
         return json.loads(s)
     except json.JSONDecodeError:
         return [item.strip() for item in s.split(',')]
 
 def _process_unpacked(function, tool_args={}, fix_json_args=True):
+    """
+    Helper function to process unpacked function calls.
+
+    Args:
+        function (Callable): The function to call.
+        tool_args (dict): The arguments for the function.
+        fix_json_args (bool): Whether to attempt to fix JSON decoding errors in arguments.
+
+    Returns:
+        tuple: A tuple containing the result of the function call and any soft errors.
+    """
     if isinstance(function, LLMFunction):
         function = function.func
     model = parameters_basemodel_from_function(function)
@@ -114,6 +146,15 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
     return function(**args), soft_errors
 
 def _is_list_type(annotation):
+    """
+    Checks if the given annotation is a list type.
+
+    Args:
+        annotation: The annotation to check.
+
+    Returns:
+        bool: True if the annotation is a list type, False otherwise.
+    """
     origin = get_origin(annotation)
     args = get_args(annotation)
 
@@ -124,6 +165,17 @@ def _is_list_type(annotation):
     return False
 
 def process_response(response: 'ChatCompletion', functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
+    """
+    Processes a ChatCompletion response, executing contained tool calls.
+
+    Args:
+        response (ChatCompletion): The response object containing tool calls.
+        functions (list[Callable]): A list of functions or Pydantic models to call.
+        choice_num (int, optional): The index of the choice to process from the response. Defaults to 0.
+
+    Returns:
+        list[ToolResult]: A list of ToolResult objects, each representing the outcome of a processed tool call.
+    """
     message = response.choices[choice_num].message
     return process_message(message, functions, **kwargs)
 
@@ -134,6 +186,19 @@ def process_message(
     case_insensitive=False,
     executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None
     ) -> list[ToolResult]:
+    """
+    Processes a ChatCompletionMessage, executing contained tool calls.
+
+    Args:
+        message (ChatCompletionMessage): The message object containing tool calls.
+        functions (list[Callable]): A list of functions or Pydantic models to call.
+        fix_json_args (bool): Whether to attempt to fix JSON decoding errors in arguments.
+        case_insensitive (bool): Whether to perform a case-insensitive match for tool names.
+        executor (ThreadPoolExecutor, optional): An executor to run the tool calls in parallel.
+
+    Returns:
+        list[ToolResult]: A list of ToolResult objects, each representing the outcome of a processed tool call.
+    """
     results = []
     if hasattr(message, 'tool_calls') and message.tool_calls:
         tool_calls = message.tool_calls
@@ -155,6 +220,19 @@ def process_one_tool_call(
         fix_json_args=True,
         case_insensitive=False
     ) -> Optional[ToolResult]:
+    """
+    Processes a single tool call from a ChatCompletion response at the specified index.
+
+    Args:
+        response (ChatCompletion): The response object containing tool calls.
+        functions (list[Callable]): A list of functions or Pydantic models to call.
+        index (int, optional): The index of the tool call to process. Defaults to 0.
+        fix_json_args (bool): Whether to attempt to fix JSON decoding errors in arguments.
+        case_insensitive (bool): Whether to perform a case-insensitive match for tool names.
+
+    Returns:
+        Optional[ToolResult]: A ToolResult object representing the outcome of the processed tool call, or None if the index is out of range.
+    """
     tool_calls = _get_tool_calls(response)
     if not tool_calls or index >= len(tool_calls):
         return None
@@ -162,6 +240,15 @@ def process_one_tool_call(
     return process_tool_call(tool_calls[index], functions, fix_json_args, case_insensitive)
 
 def _get_tool_calls(response: 'ChatCompletion') -> list[ChatCompletionMessageToolCall]:
+    """
+    Helper function to get tool calls from a ChatCompletion response.
+
+    Args:
+        response (ChatCompletion): The response object containing tool calls.
+
+    Returns:
+        list[ChatCompletionMessageToolCall]: A list of tool calls.
+    """
     if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
         return response.choices[0].message.tool_calls
     return []
