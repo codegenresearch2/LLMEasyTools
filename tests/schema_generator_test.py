@@ -1,7 +1,7 @@
 import pytest
 from typing import List, Optional, Union, Literal, Annotated
 from pydantic import BaseModel, Field, field_validator
-from llm_easy_tools import get_function_schema, LLMFunction
+from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
 from pprint import pprint
 
@@ -11,7 +11,10 @@ def simple_function(count: int, size: Optional[float] = None):
     pass
 
 
-def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Annotated[str, 'The banana']):
+def simple_function_no_docstring(
+        apple: Annotated[str, 'The apple'],
+        banana: Annotated[str, 'The banana']
+):
     pass
 
 
@@ -27,7 +30,7 @@ def insert_prefix(model: BaseModel, schema: dict, prefix: str = ""):
     Returns:
         dict: The updated function schema with the prefixed name.
     """
-    schema['name'] = f"{prefix}{schema['name']}"
+    schema['name'] = f"{prefix}{schema['name']}" if prefix else schema['name']
     return schema
 
 
