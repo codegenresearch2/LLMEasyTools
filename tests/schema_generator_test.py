@@ -1,6 +1,6 @@
 import pytest
-from typing import Annotated
-from pydantic import BaseModel, Field
+from typing import List, Optional, Union, Literal
+from pydantic import BaseModel, Field, field_validator
 from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
 from pprint import pprint
@@ -20,7 +20,7 @@ def simple_function(count: int, size: Optional[float] = None):
     pass
 
 
-def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Annotated[str, 'The banana']):
+def simple_function_no_docstring(apple: str, banana: str):
     pass
 
 
