@@ -97,7 +97,7 @@ def get_name(func: Union[Callable, LLMFunction], case_insensitive: bool = False)
     return schema_name
 
 
-def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict:
+def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict[str, Any]:
     if isinstance(function, LLMFunction):
         if case_insensitive:
             raise ValueError("Cannot case insensitive for LLMFunction")
