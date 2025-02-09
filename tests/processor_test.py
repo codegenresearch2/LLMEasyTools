@@ -152,16 +152,21 @@ def test_parallel_tools():
 
         def increment_counter(self):
             self.counter += 1
+            import time
+            time.sleep(1)  # Increased sleep duration to 1 second
 
     counter = CounterClass()
     tool_call = mk_tool_call("increment_counter", {})
     response = mk_chat_completion([tool_call] * 10)
 
     executor = ThreadPoolExecutor()
+    start_time = time.time()
     results = process_response(response, [counter.increment_counter], executor=executor)
+    end_time = time.time()
 
     assert results[9].error is None
     assert counter.counter == 10
+    assert end_time - start_time <= 3, f"Expected processing time to be less than or equal to 3 seconds, but was {end_time - start_time}"
 
 def test_process_one_tool_call():
     class User(BaseModel):
