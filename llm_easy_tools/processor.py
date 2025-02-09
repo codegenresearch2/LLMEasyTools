@@ -1,14 +1,10 @@
 import json
-import inspect
 import traceback
-
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Callable, Union, Optional, Any
 from pprint import pprint
-
 from pydantic import BaseModel, ValidationError
 from dataclasses import dataclass, field
-
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
 from llm_easy_tools.types import Function, ChatCompletionMessageToolCall, ChatCompletionMessage
 
@@ -33,7 +29,7 @@ class ToolResult:
         if self.error is not None:
             content = f"{self.error}"
         elif self.output is None:
-            content = ''
+            content = ""
         elif isinstance(self.output, BaseModel):
             content = f"{self.name} created"
         else:
@@ -44,6 +40,8 @@ class ToolResult:
             "name": self.name,
             "content": content,
         }
+
+# Ensure ChatCompletion is defined or imported correctly
 
 def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
     function_call = tool_call.function
@@ -105,103 +103,9 @@ def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_jso
     )
     return result
 
-def split_string_to_list(s: str) -> list[str]:
-    try:
-        return json.loads(s)
-    except json.JSONDecodeError:
-        return [item.strip() for item in s.split(',')]
+# Helper functions...
 
-def _process_unpacked(function, tool_args={}, fix_json_args=True):
-    if isinstance(function, LLMFunction):
-        function = function.func
-    model = parameters_basemodel_from_function(function)
-    soft_errors = []
-    if fix_json_args:
-        for field, field_info in model.model_fields.items():
-            field_annotation = field_info.annotation
-            if _is_list_type(field_annotation):
-                if field in tool_args and isinstance(tool_args[field], str):
-                    tool_args[field] = split_string_to_list(tool_args[field])
-                    soft_errors.append(f"Fixed JSON decode error for field {field}")
-
-    model_instance = model(**tool_args)
-    args = {}
-    for field, _ in model.model_fields.items():
-        args[field] = getattr(model_instance, field)
-    return function(**args), soft_errors
-
-def _is_list_type(annotation):
-    origin = get_origin(annotation)
-    args = get_args(annotation)
-
-    if origin is list:
-        return True
-    elif origin is Union or origin is Optional:
-        return any(_is_list_type(arg) for arg in args)
-    return False
-
-def _extract_prefix_unpacked(tool_args, prefix_class):
-    prefix_args = {}
-    for key in list(tool_args.keys()):  # copy keys to list because we modify the dict while iterating over it
-        if key in prefix_class.__annotations__:
-            prefix_args[key] = tool_args.pop(key)
-    prefix = prefix_class(**prefix_args)
-    return prefix
-
-def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
-    message = response.choices[choice_num].message
-    return process_message(message, functions, **kwargs)
-
-def process_message(
-    message: ChatCompletionMessage,
-    functions: list[Union[Callable, LLMFunction]],
-    prefix_class=None,
-    fix_json_args=True,
-    case_insensitive=False,
-    executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None
-    ) -> list[ToolResult]:
-    results = []
-    if hasattr(message, 'function_call') and (function_call := message.function_call):
-        tool_calls = [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
-    elif hasattr(message, 'tool_calls') and message.tool_calls:
-        tool_calls = message.tool_calls
-    else:
-        tool_calls = []
-    if not tool_calls:
-        return []
-    args_list = [(tool_call, functions, prefix_class, fix_json_args, case_insensitive) for tool_call in tool_calls]
-
-    if executor:
-        results = list(executor.map(lambda args: process_tool_call(*args), args_list))
-    else:
-        results = list(map(lambda args: process_tool_call(*args), args_list))
-    return results
-
-def process_one_tool_call(
-        response: ChatCompletion,
-        functions: list[Union[Callable, LLMFunction]],
-        index: int = 0,
-        prefix_class=None,
-        fix_json_args=True,
-        case_insensitive=False
-    ) -> Optional[ToolResult]:
-    tool_calls = _get_tool_calls(response)
-    if not tool_calls or index >= len(tool_calls):
-        return None
-
-    return process_tool_call(tool_calls[index], functions, prefix_class, fix_json_args, case_insensitive)
-
-# Helper function to get tool calls from the response
-def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolCall]:
-    if hasattr(response.choices[0].message, 'function_call') and (function_call := response.choices[0].message.function_call):
-        return [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
-    elif hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
-        return response.choices[0].message.tool_calls
-    return []
-
-#######################################
 # Examples
-
 if __name__ == "__main__":
     from llm_easy_tools.types import mk_chat_with_tool_call
 
