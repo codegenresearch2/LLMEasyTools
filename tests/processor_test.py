@@ -41,7 +41,7 @@ def test_process_methods(tool_name, args, expected_output):
             return f'executed tool_method with param: {arg}'
 
         def no_output(self, arg: int):
-            pass
+            return ''
 
         def failing_method(self, arg: int) -> str:
             raise Exception('Some exception')
