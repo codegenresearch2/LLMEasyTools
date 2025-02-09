@@ -30,7 +30,8 @@ def mk_chat_completion(tool_calls):
         ]
     )
 
-def test_process_methods():
+@pytest.fixture
+def test_tool():
     class TestTool:
         def tool_method(self, arg: int) -> str:
             return f'executed tool_method with param: {arg}'
@@ -41,22 +42,23 @@ def test_process_methods():
         def failing_method(self, arg: int) -> str:
             raise Exception('Some exception')
 
-    tool = TestTool()
+    return TestTool()
 
+def test_process_methods(test_tool):
     tool_call = mk_tool_call("tool_method", {"arg": 2})
-    result = process_tool_call(tool_call, [tool.tool_method])
+    result = process_tool_call(tool_call, [test_tool.tool_method])
     assert isinstance(result, ToolResult)
     assert result.output == 'executed tool_method with param: 2'
 
     tool_call = mk_tool_call("failing_method", {"arg": 2})
-    result = process_tool_call(tool_call, [tool.failing_method])
+    result = process_tool_call(tool_call, [test_tool.failing_method])
     assert isinstance(result, ToolResult)
     assert "Some exception" in str(result.error)
     message = result.to_message()
     assert "Some exception" in message['content']
 
     tool_call = mk_tool_call("no_output", {"arg": 2})
-    result = process_tool_call(tool_call, [tool.no_output])
+    result = process_tool_call(tool_call, [test_tool.no_output])
     assert isinstance(result, ToolResult)
     message = result.to_message()
     assert message['content'] == ''
