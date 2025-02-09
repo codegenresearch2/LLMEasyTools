@@ -1,5 +1,5 @@
 import pytest
-from typing import List, Optional, Union, Literal
+from typing import Annotated
 from pydantic import BaseModel, Field
 from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
@@ -8,7 +8,7 @@ from pprint import pprint
 
 def insert_prefix(prefix_model, schema):
     new_schema = schema.copy()
-    new_schema['name'] = f'{prefix_model.__name__}_{new_schema['name']}'
+    new_schema['name'] = f'{prefix_model.__name__}_{new_schema['name']}'  # Fixed the syntax error here
     for prop in prefix_model.__fields__.values():
         if prop.name not in new_schema['parameters']['properties']:
             new_schema['parameters']['properties'][prop.name] = prop.field_info
@@ -20,11 +20,12 @@ def simple_function(count: int, size: Optional[float] = None):
     pass
 
 
-def simple_function_no_docstring(apple: str, banana: str):
+def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Annotated[str, 'The banana']):
     pass
 
 
-@pytest.mark.xfail(reason='Function not defined')  # Assuming the function is not defined, this is a placeholder
+@pytest.mark.xfail(reason='Function not defined')
+# Assuming the function is not defined, this is a placeholder
 def test_function_schema():
     function_schema = get_function_schema(simple_function)
     assert function_schema['name'] == 'simple_function'
