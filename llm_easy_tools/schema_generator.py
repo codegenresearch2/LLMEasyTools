@@ -44,7 +44,6 @@ def tool_def(function_schema: dict) -> dict:
 def get_tool_defs(
         functions: list[Union[Callable, LLMFunction]],
         case_insensitive: bool = False,
-        prefix_schema_name: bool = True,
         strict: bool = False
         ) -> list[dict]:
     result = []
@@ -53,9 +52,6 @@ def get_tool_defs(
             fun_schema = function.schema
         else:
             fun_schema = get_function_schema(function, case_insensitive, strict)
-
-        if prefix_schema_name:
-            fun_schema['name'] = get_name(function, case_insensitive)
 
         result.append(tool_def(fun_schema))
     return result
@@ -81,6 +77,7 @@ def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]
 
 
 def _recursive_purge_titles(d: Dict[str, Any]) -> None:
+    """Remove titles from a schema recursively"""
     if isinstance(d, dict):
         for key in list(d.keys()):
             if key == 'title' and "type" in d.keys():
