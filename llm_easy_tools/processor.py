@@ -2,7 +2,7 @@ import json
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Callable, Union, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from dataclasses import dataclass, field
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
 from llm_easy_tools.types import ChatCompletion, ChatCompletionMessageToolCall, ChatCompletionMessage, Function
