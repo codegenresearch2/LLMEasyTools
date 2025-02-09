@@ -155,7 +155,7 @@ def _is_list_type(annotation):
 # Helper function to extract prefix from tool arguments
 def _extract_prefix_unpacked(tool_args, prefix_class):
     prefix_args = {}
-    for key in list(tool_args.keys()):  # copy keys to list because we modify the dict while iterating over it
+    for key in list(tool_args.keys()):
         if key in prefix_class.__annotations__:
             prefix_args[key] = tool_args.pop(key)
     prefix = prefix_class(**prefix_args)
@@ -163,7 +163,7 @@ def _extract_prefix_unpacked(tool_args, prefix_class):
 
 # Process the response to extract tool calls
 def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
-    message = response['choices'][choice_num]['message']
+    message = response.choices[choice_num].message
     return process_message(message, functions, **kwargs)
 
 # Process the message to handle tool calls
@@ -176,10 +176,10 @@ def process_message(
     executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None
     ) -> list[ToolResult]:
     results = []
-    if 'function_call' in message and message['function_call']:
-        tool_calls = [{"id": 'A', "function": Function(name=message['function_call']['name'], arguments=message['function_call']['arguments']), "type": 'function'}]
-    elif 'tool_calls' in message and message['tool_calls']:
-        tool_calls = message['tool_calls']
+    if 'function_call' in message and message.function_call:
+        tool_calls = [{"id": 'A', "function": Function(name=message.function_call.name, arguments=message.function_call.arguments), "type": 'function'}])
+    elif 'tool_calls' in message and message.tool_calls:
+        tool_calls = message.tool_calls
     else:
         tool_calls = []
 
@@ -210,8 +210,8 @@ def process_one_tool_call(
 
 # Helper function to get tool calls from the response
 def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolCall]:
-    if 'function_call' in response['choices'][0]['message'] and (function_call := response['choices'][0]['message']['function_call']):
-        return [{"id": 'A', "function": Function(name=function_call['name'], arguments=function_call['arguments']), "type": 'function'}]
-    elif 'tool_calls' in response['choices'][0]['message'] and response['choices'][0]['message']['tool_calls']:
-        return response['choices'][0]['message']['tool_calls']
+    if 'function_call' in response.choices[0].message and (function_call := response.choices[0].message.function_call):
+        return [{"id": 'A', "function": Function(name=function_call.name, arguments=function_call.arguments), "type": 'function'}])
+    elif 'tool_calls' in response.choices[0].message and response.choices[0].message.tool_calls:
+        return response.choices[0].message.tool_calls
     return []
