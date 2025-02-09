@@ -97,13 +97,13 @@ def get_name(func: Union[Callable, LLMFunction], case_insensitive: bool = False)
     return schema_name
 
 
-def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict[str, Any]:
+def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict:
     if isinstance(function, LLMFunction):
         if case_insensitive:
             raise ValueError("Cannot case insensitive for LLMFunction")
         return function.schema
 
-    description = '' if function.__doc__ is None else function.__doc__.strip()
+    description = '' if not hasattr(function, '__doc__') else function.__doc__.strip()
 
     schema_name = function.__name__
     if case_insensitive:
@@ -126,20 +126,20 @@ def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive
     return function_schema
 
 
-def to_strict_json_schema(schema: dict) -> dict[str, Any]:
+def to_strict_json_schema(schema: dict) -> dict:
     return _ensure_strict_json_schema(schema, path=())
 
 
-def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict[str, Any]:
+def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict:
     """Mutates the given JSON schema to ensure it conforms to the `strict` standard"""
-    if not is_dict(json_schema):
+    if not isinstance(json_schema, dict):
         raise TypeError(f"Expected {json_schema} to be a dictionary; path={path}")
 
     if json_schema.get("type") == "object" and "additionalProperties" not in json_schema:
         json_schema["additionalProperties"] = False
 
     properties = json_schema.get("properties")
-    if is_dict(properties):
+    if isinstance(properties, dict):
         json_schema["required"] = list(properties.keys())
         json_schema["properties"] = {
             key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key))
@@ -147,30 +147,32 @@ def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> di
         }
 
     items = json_schema.get("items")
-    if is_dict(items):
+    if isinstance(items, dict):
         json_schema["items"] = _ensure_strict_json_schema(items, path=(*path, "items"))
 
     any_of = json_schema.get("anyOf")
     if isinstance(any_of, list):
         json_schema["anyOf"] = [
-            _ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i))) for i, variant in enumerate(any_of)
+            _ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i)))
+            for i, variant in enumerate(any_of)
         ]
 
     all_of = json_schema.get("allOf")
     if isinstance(all_of, list):
         json_schema["allOf"] = [
-            _ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i))) for i, entry in enumerate(all_of)
+            _ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i)))
+            for i, entry in enumerate(all_of)
         ]
 
     defs = json_schema.get("$defs")
-    if is_dict(defs):
+    if isinstance(defs, dict):
         for def_name, def_schema in defs.items():
             _ensure_strict_json_schema(def_schema, path=(*path, "$defs", def_name))
 
     return json_schema
 
 
-def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
+def is_dict(obj: object) -> TypeGuard[dict]:
     return isinstance(obj, dict)
 
 
