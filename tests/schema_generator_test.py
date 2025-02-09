@@ -27,10 +27,10 @@ def search(query: Query, additional_param: str = None):
         result['additional_param'] = additional_param
     return result
 
-# Define a fixture for the additional parameter
+# Define a fixture for the query data
 @pytest.fixture
-def additional_param():
-    return 'extra info'
+def query_data():
+    return Query(query='example query', region='example region')
 
 # Define a more complex model for nested structures
 class Address(BaseModel):
@@ -43,7 +43,9 @@ class Company(BaseModel):
     addresses: list[Address]
 
 # Test function for search using pytest
-@pytest.mark.parametrize('query_data', [Query(query='example query', region='example region')], indirect=True)
+@pytest.mark.parametrize('query_data, additional_param',
+                         [(query_data(), 'extra info')],
+                         indirect=['query_data'])
 def test_search(query_data, additional_param):
     result = search(query_data, additional_param)
     assert isinstance(result, dict), 'The result should be a dictionary.'
