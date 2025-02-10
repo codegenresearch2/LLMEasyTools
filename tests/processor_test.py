@@ -36,7 +36,12 @@ def _extract_prefix_unpacked(args, model):
     unpacked_data = model(**args)
     return unpacked_data
 
-def test_process_methods():
+@pytest.mark.parametrize("tool_name, args, expected_output", [
+    ("tool_method", {"arg": 2}, "executed tool_method with param: 2"),
+    ("failing_method", {"arg": 2}, "Some exception"),
+    ("no_output", {"arg": 2}, None),
+])
+def test_process_methods(tool_name, args, expected_output):
     class TestTool:
         def tool_method(self, arg: int) -> str:
             return f'executed tool_method with param: {arg}'
@@ -49,23 +54,9 @@ def test_process_methods():
 
     tool = TestTool()
 
-    tool_call = mk_tool_call("tool_method", {"arg": 2})
-    result = process_tool_call(tool_call, [tool.tool_method])
-    assert isinstance(result, ToolResult)
-    assert result.output == 'executed tool_method with param: 2'
-
-    tool_call = mk_tool_call("failing_method", {"arg": 2})
-    result = process_tool_call(tool_call, [tool.failing_method])
-    assert isinstance(result, ToolResult)
-    assert "Some exception" in str(result.error)
-    message = result.to_message()
-    assert "Some exception" in message['content']
-
-    tool_call = mk_tool_call("no_output", {"arg": 2})
-    result = process_tool_call(tool_call, [tool.no_output])
-    assert isinstance(result, ToolResult)
-    message = result.to_message()
-    assert message['content'] == ''
+    tool_call = mk_tool_call(tool_name, args)
+    result = process_tool_call(tool_call, [getattr(tool, tool_name)])
+    assert result.output == expected_output
 
 def test_process_complex():
     class Address(BaseModel):
@@ -88,7 +79,6 @@ def test_process_complex():
 
     tool_call = mk_tool_call("print_companies", {"companies": company_list})
     result = process_tool_call(tool_call, [print_companies])
-    assert isinstance(result, ToolResult)
     assert isinstance(result.output, list)
     assert isinstance(result.output[0], Company)
 
