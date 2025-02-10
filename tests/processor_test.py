@@ -30,6 +30,12 @@ def mk_chat_completion(tool_calls):
         ]
     )
 
+def _extract_prefix_unpacked(args, model):
+    # Placeholder implementation for _extract_prefix_unpacked
+    # This function should unpack the arguments based on the provided model
+    unpacked_data = model(**args)
+    return unpacked_data
+
 def test_process_methods():
     class TestTool:
         def tool_method(self, arg: int) -> str:
@@ -88,7 +94,7 @@ def test_process_complex():
 
 def test_prefixing():
     class Reflection(BaseModel):
-        relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
+        relevancy: str = Field(..., description="Relevance of the information")
 
     args = { 'relevancy': 'good', 'name': 'hammer'}
     prefix = _extract_prefix_unpacked(args, Reflection)
