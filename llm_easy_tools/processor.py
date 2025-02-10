@@ -157,9 +157,9 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
 
 def _is_list_type(annotation):
     try:
-        from typing import get_origin
+        from typing import get_origin, get_args
     except ImportError:
-        raise ImportError("The 'get_origin' function is not available. Please ensure that you have the necessary typing module imported.")
+        raise ImportError("The 'get_origin' and 'get_args' functions are not available. Please ensure that you have the necessary typing module imported.")
 
     origin = get_origin(annotation)
     args = get_args(annotation)
