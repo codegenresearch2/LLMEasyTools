@@ -49,10 +49,12 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, functions_or_mod
     except json.decoder.JSONDecodeError as e:
         if fix_json_args:
             soft_errors.append(e)
-            tool_args = json.loads(args.replace(', }', '}').replace(',}', '}'))
-        else:
-            error = e
-            stack_trace = traceback.format_exc()
+            fixed_args = args.replace(', }', '}').replace(',}', '}')
+            try:
+                tool_args = json.loads(fixed_args)
+            except json.decoder.JSONDecodeError:
+                error = e
+                stack_trace = traceback.format_exc()
 
     tool = next((f for f in functions_or_models if get_name(f, case_insensitive=case_insensitive) == tool_name), None)
 
@@ -82,6 +84,9 @@ def _process_unpacked(function: Union[Callable, BaseModel], tool_args: dict[str,
                     tool_args[field] = json.loads(tool_args[field])
                 except json.JSONDecodeError:
                     soft_errors.append(f"Failed to parse JSON for field {field}")
+                else:
+                    if isinstance(tool_args[field], str):
+                        tool_args[field] = split_string_to_list(tool_args[field])
 
     model_instance = model(**tool_args)
     args = {field: getattr(model_instance, field) for field in model.model_fields}
@@ -130,6 +135,7 @@ def split_string_to_list(s: str) -> list[str]:
 # Examples
 if __name__ == "__main__":
     from llm_easy_tools.types import mk_chat_with_tool_call
+    from pprint import pprint
 
     def original_function():
         return 'Result of function_decorated'
@@ -148,16 +154,16 @@ if __name__ == "__main__":
         email: str
 
     # Process a response with a tool call to a decorated function
-    print(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
+    pprint(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
 
     # Process a tool call to a decorated function
     call_to_altered_name = mk_chat_with_tool_call('altered_name', {}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_altered_name, [function_decorated]))
+    pprint(process_tool_call(call_to_altered_name, [function_decorated]))
 
     # Process a tool call to a method of an object
     call_to_simple_method = mk_chat_with_tool_call('simple_method', {"count": 1, "size": 2.2}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_simple_method, [example_object.simple_method]))
+    pprint(process_tool_call(call_to_simple_method, [example_object.simple_method]))
 
     # Process a tool call to a Pydantic model
     call_to_model = mk_chat_with_tool_call('User', {"name": 'John', "email": 'john@example.com'}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_model, [User]))
+    pprint(process_tool_call(call_to_model, [User]))
