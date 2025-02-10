@@ -9,17 +9,15 @@ class NoMatchingTool(Exception):
         self.message = message
         super().__init__(self.message)
 
-from dataclasses import dataclass
-
-@dataclass
 class ToolResult:
-    tool_call_id: str
-    name: str
-    output: Optional[Union[str, BaseModel]] = None
-    error: Optional[Exception] = None
-    soft_errors: List[Exception] = None
-    prefix: Optional[BaseModel] = None
-    tool: Optional[Union[Callable, BaseModel]] = None
+    def __init__(self, tool_call_id: str, name: str, output: Optional[Union[str, BaseModel]] = None, error: Optional[Exception] = None, soft_errors: List[Exception] = [], prefix: Optional[BaseModel] = None, tool: Optional[Union[Callable, BaseModel]] = None):
+        self.tool_call_id = tool_call_id
+        self.name = name
+        self.output = output
+        self.error = error
+        self.soft_errors = soft_errors
+        self.prefix = prefix
+        self.tool = tool
 
     def to_message(self) -> dict:
         if self.error is not None:
