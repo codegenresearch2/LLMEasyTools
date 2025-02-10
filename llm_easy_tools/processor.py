@@ -2,7 +2,7 @@ import json
 import inspect
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from typing import Callable, Union, Optional, Any
+from typing import Callable, Union, Optional, Any, get_origin, get_args
 from pydantic import BaseModel, ValidationError
 from dataclasses import dataclass, field
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
@@ -42,6 +42,19 @@ class ToolResult:
         }
 
 def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
+    """
+    Processes a tool call based on the provided tool call and functions.
+    
+    Args:
+        tool_call: The tool call object containing the function name and arguments.
+        functions_or_models: List of functions or Pydantic models to match the tool call.
+        prefix_class: Optional class to use as a prefix for matching tool names.
+        fix_json_args: Boolean flag to attempt fixing JSON decode errors in arguments.
+        case_insensitive: Boolean flag to perform case-insensitive matching.
+    
+    Returns:
+        ToolResult: The result of the tool call.
+    """
     function_call = tool_call.function
     tool_name = function_call.name
     args = function_call.arguments
@@ -145,6 +158,17 @@ def _extract_prefix_unpacked(tool_args, prefix_class):
     return(prefix)
 
 def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
+    """
+    Processes a ChatCompletion response, executing contained tool calls.
+    
+    Args:
+        response: The response object containing tool calls.
+        functions: List of functions or LLMFunction objects to call.
+        choice_num: Index of the choice to process from the response.
+    
+    Returns:
+        List[ToolResult]: List of ToolResult objects, each representing the outcome of a processed tool call.
+    """
     message = response.choices[choice_num].message
     return process_message(message, functions, **kwargs)
 
@@ -156,6 +180,20 @@ def process_message(
     case_insensitive=False,
     executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None
     ) -> list[ToolResult]:
+    """
+    Processes a ChatCompletionMessage, executing contained tool calls.
+    
+    Args:
+        message: The message object containing tool calls.
+        functions: List of functions or LLMFunction objects to call.
+        prefix_class: Optional class to use as a prefix for matching tool names.
+        fix_json_args: Boolean flag to attempt fixing JSON decode errors in arguments.
+        case_insensitive: Boolean flag to perform case-insensitive matching.
+        executor: Optional executor to use for parallel processing.
+    
+    Returns:
+        List[ToolResult]: List of ToolResult objects, each representing the outcome of a processed tool call.
+    """
     results = []
     if hasattr(message, 'function_call') and (function_call:=message.function_call):
         tool_calls = [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
@@ -182,6 +220,20 @@ def process_one_tool_call(
         fix_json_args=True,
         case_insensitive=False
     ) -> Optional[ToolResult]:
+    """
+    Processes a single tool call from a ChatCompletion response at the specified index.
+    
+    Args:
+        response: The response object containing tool calls.
+        functions: List of functions or LLMFunction objects to call.
+        index: Index of the tool call to process.
+        prefix_class: Optional class to use as a prefix for matching tool names.
+        fix_json_args: Boolean flag to attempt fixing JSON decode errors in arguments.
+        case_insensitive: Boolean flag to perform case-insensitive matching.
+    
+    Returns:
+        Optional[ToolResult]: The result of the processed tool call or None if the index is out of range.
+    """
     tool_calls = _get_tool_calls(response)
     if not tool_calls or index >= len(tool_calls):
         return None
