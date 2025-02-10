@@ -207,6 +207,7 @@ def test_additional_cases():
     assert len(result.soft_errors) > 0
     assert isinstance(result.soft_errors[0], ValidationError)
     assert "extra_fields" in str(result.soft_errors[0])
+    assert "extra_field" in str(result.soft_errors[0])
 
     # Adding a test case for missing required field
     tool_call = mk_tool_call("User", {"age": 25})
