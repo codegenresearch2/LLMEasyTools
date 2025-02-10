@@ -5,13 +5,7 @@ from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
 from pprint import pprint
 
-def simple_function(count: int, size: Optional[float] = None):
-    """simple function does something"""
-    pass
-
-def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Annotated[str, 'The banana']):
-    pass
-
+# Ensure the insert_prefix function is defined in the llm_easy_tools module
 def insert_prefix(model: BaseModel, schema: dict, case_insensitive: bool = False):
     """
     Inserts a prefix into the name of the schema.
