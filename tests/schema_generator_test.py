@@ -1,11 +1,12 @@
-import pytest
+# Import necessary modules
 from typing import List, Optional, Union, Literal, Annotated
 from pydantic import BaseModel, Field, field_validator
 from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
 from pprint import pprint
+import pytest
 
-# Ensure the insert_prefix function is defined in the llm_easy_tools module
+# Define the insert_prefix function within the llm_easy_tools module
 def insert_prefix(model: BaseModel, schema: dict, case_insensitive: bool = False):
     """
     Inserts a prefix into the name of the schema.
@@ -25,6 +26,7 @@ def insert_prefix(model: BaseModel, schema: dict, case_insensitive: bool = False
     schema['name'] = new_schema_name
     return schema
 
+# Define the simple_function with a concise docstring
 def simple_function(count: int, size: Optional[float] = None):
     """
     A simple function that takes two parameters: count and size.
@@ -35,16 +37,18 @@ def simple_function(count: int, size: Optional[float] = None):
     """
     pass
 
+# Define the simple_function_no_docstring with a concise description
 def simple_function_no_docstring(
         apple: Annotated[str, 'The apple'],
         banana: Annotated[str, 'The banana']
 ):
     pass
 
+# Test function to check the schema of simple_function
 def test_function_schema():
     function_schema = get_function_schema(simple_function)
     assert function_schema['name'] == 'simple_function'
-    assert function_schema['description'] == 'simple function does something'
+    assert function_schema['description'] == 'A simple function that takes two parameters: count and size.'
     params_schema = function_schema['parameters']
     assert len(params_schema['properties']) == 2
     assert params_schema['type'] == "object"
@@ -54,6 +58,7 @@ def test_function_schema():
     assert 'title' not in params_schema['properties']['count']
     assert 'description' not in params_schema
 
+# Test function to check the handling of functions with no parameters
 def test_noparams():
     def function_with_no_params():
         """
@@ -74,6 +79,7 @@ def test_noparams():
     assert result['description'] == ''
     assert result['parameters']['properties'] == {}
 
+# Test function to check the handling of nested structures
 def test_nested():
     class Foo(BaseModel):
         count: int
@@ -101,6 +107,7 @@ def test_nested():
     assert function_schema['name'] == 'FooAndBar'
     assert len(function_schema['parameters']['properties']) == 2
 
+# Test function to check the handling of methods
 def test_methods():
     class ExampleClass:
         def simple_method(self, count: int, size: Optional[float] = None):
@@ -115,6 +122,7 @@ def test_methods():
     params_schema = function_schema['parameters']
     assert len(params_schema['properties']) == 2
 
+# Test function to check the LLMFunction class
 def test_LLMFunction():
     def new_simple_function(count: int, size: Optional[float] = None):
         """simple function does something"""
@@ -129,6 +137,7 @@ def test_LLMFunction():
     function_schema = func.schema
     assert function_schema['strict'] == True
 
+# Test function to check the merging of schemas
 def test_merge_schemas():
     class Reflection(BaseModel):
         relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
@@ -148,6 +157,7 @@ def test_merge_schemas():
     new_schema = insert_prefix(Reflection, function_schema, case_insensitive=True)
     assert new_schema['name'] == "reflection_and_simple_function"
 
+# Test function to check the merging of schemas with no parameters
 def test_noparams_function_merge():
     def function_no_params():
         pass
@@ -165,6 +175,7 @@ def test_noparams_function_merge():
     assert len(new_schema['parameters']['properties']) == 2
     assert new_schema['name'] == 'Reflection_and_function_no_params'
 
+# Test function to check the initialization of models
 def test_model_init_function():
     class User(BaseModel):
         """A user object"""
@@ -183,6 +194,7 @@ def test_model_init_function():
     assert len(new_function.schema['parameters']['properties']) == 2
     assert len(new_function.schema['parameters']['required']) == 2
 
+# Test function to check case insensitivity in schema names
 def test_case_insensitivity():
     class User(BaseModel):
         """A user object"""
@@ -193,6 +205,7 @@ def test_case_insensitivity():
     assert function_schema['name'] == 'user'
     assert get_name(User, case_insensitive=True) == 'user'
 
+# Test function to check for missing type annotations
 def test_function_no_type_annotation():
     def function_with_missing_type(param):
         return f"Value is {param}"
@@ -201,6 +214,7 @@ def test_function_no_type_annotation():
         get_function_schema(function_with_missing_type)
     assert str(exc_info.value) == "Parameter 'param' has no type annotation"
 
+# Test function to check the handling of Pydantic parameters
 def test_pydantic_param():
     class Query(BaseModel):
         query: str
@@ -214,6 +228,7 @@ def test_pydantic_param():
     assert schema[0]['function']['description'] == ''
     assert schema[0]['function']['parameters']['properties']['query']['$ref'] == '#/$defs/Query'
 
+# Test function to check strict mode for schemas
 def test_strict():
     class Address(BaseModel):
         street: str
