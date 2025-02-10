@@ -15,6 +15,9 @@ def simple_function_no_docstring(apple: Annotated[str, 'The apple'], banana: Ann
     pass
 
 class Foo(BaseModel):
+    """
+    A class representing a foo with count and size attributes.
+    """
     count: int
     size: Optional[float] = None
 
