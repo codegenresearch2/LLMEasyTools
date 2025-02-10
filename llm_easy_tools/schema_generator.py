@@ -7,6 +7,7 @@ import pydantic as pd
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
+import copy
 from pprint import pprint
 import sys
 
