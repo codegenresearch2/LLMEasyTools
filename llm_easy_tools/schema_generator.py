@@ -194,7 +194,11 @@ def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
     # as that check is not worth the performance cost
     return isinstance(obj, dict)
 
-def insert_prefix(schema, prefix_schema_name=True, case_insensitive = False):
+def insert_prefix(prefix_class, schema, prefix_schema_name=True, case_insensitive = False):
+    if not issubclass(prefix_class, BaseModel):
+        raise TypeError(
+            f"The given class reference is not a subclass of pydantic BaseModel"
+        )
     prefix_schema = prefix_class.model_json_schema()
     _recursive_purge_titles(prefix_schema)
     prefix_schema.pop('description', '')
