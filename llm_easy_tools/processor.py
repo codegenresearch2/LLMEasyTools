@@ -37,11 +37,12 @@ class ToolResult:
             "content": content,
         }
 
-def process_tool_call(tool_call: ChatCompletionMessageToolCall, tools: list[Union[Callable, BaseModel]], fix_json_args=True, case_insensitive=False) -> ToolResult:
+def process_tool_call(tool_call: ChatCompletionMessageToolCall, functions_or_models: list[Union[Callable, BaseModel]], fix_json_args=True, case_insensitive=False) -> ToolResult:
     function_call = tool_call.function
     tool_name = function_call.name
     args = function_call.arguments
     soft_errors, error, stack_trace, output = [], None, None, None
+    tool_args = {}
 
     try:
         tool_args = json.loads(args)
@@ -54,7 +55,7 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, tools: list[Unio
             error = e
             stack_trace = traceback.format_exc()
 
-    tool = next((t for t in tools if get_name(t, case_insensitive=case_insensitive) == tool_name), None)
+    tool = next((f for f in functions_or_models if get_name(f, case_insensitive=case_insensitive) == tool_name.lower()), None)
     if tool:
         try:
             output, new_soft_errors = _process_unpacked(tool, tool_args, fix_json_args=fix_json_args)
@@ -67,28 +68,57 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, tools: list[Unio
 
     return ToolResult(tool_call_id=tool_call.id, name=tool_name, arguments=tool_args, output=output, error=error, stack_trace=stack_trace, soft_errors=soft_errors, tool=tool)
 
-def _process_unpacked(tool, tool_args={}, fix_json_args=True):
-    if isinstance(tool, LLMFunction):
-        tool = tool.func
-    model = parameters_basemodel_from_function(tool)
+def _process_unpacked(function, tool_args={}, fix_json_args=True):
+    if isinstance(function, LLMFunction):
+        function = function.func
+    model = parameters_basemodel_from_function(function)
     soft_errors = []
+
+    for field, field_info in model.model_fields.items():
+        field_annotation = field_info.annotation
+        if _is_list_type(field_annotation):
+            if field in tool_args and isinstance(tool_args[field], str):
+                tool_args[field] = split_string_to_list(tool_args[field])
+                soft_errors.append(f"Fixed JSON decode error for field {field}")
+
     model_instance = model(**tool_args)
     args = {field: getattr(model_instance, field) for field in model.model_fields}
-    return tool(**args), soft_errors
+    return function(**args), soft_errors
 
-def process_response(response: ChatCompletion, tools: list[Union[Callable, LLMFunction]], choice_num=0, case_insensitive=False, executor: Optional[ThreadPoolExecutor]=None) -> list[ToolResult]:
+def _is_list_type(annotation):
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin is list:
+        return True
+    elif origin is Union or origin is Optional:
+        return any(_is_list_type(arg) for arg in args)
+    return False
+
+def split_string_to_list(s: str) -> list[str]:
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return [item.strip() for item in s.split(',')]
+
+def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
     message = response.choices[choice_num].message
-    return process_message(message, tools, case_insensitive=case_insensitive, executor=executor)
+    return process_message(message, functions, **kwargs)
 
-def process_message(message: ChatCompletionMessage, tools: list[Union[Callable, LLMFunction]], case_insensitive=False, executor: Optional[ThreadPoolExecutor]=None) -> list[ToolResult]:
+def process_message(message: ChatCompletionMessage, functions: list[Union[Callable, LLMFunction]], **kwargs) -> list[ToolResult]:
     tool_calls = _get_tool_calls(message)
-    args_list = [(tool_call, tools, case_insensitive) for tool_call in tool_calls]
-    results = list(executor.map(lambda args: process_tool_call(*args), args_list)) if executor else list(map(lambda args: process_tool_call(*args), args_list))
+    args_list = [(tool_call, functions, **kwargs) for tool_call in tool_calls]
+
+    if 'executor' in kwargs and kwargs['executor']:
+        results = list(kwargs['executor'].map(lambda args: process_tool_call(*args), args_list))
+    else:
+        results = list(map(lambda args: process_tool_call(*args), args_list))
+
     return results
 
-def process_one_tool_call(response: ChatCompletion, tools: list[Union[Callable, LLMFunction]], index: int = 0, case_insensitive=False) -> Optional[ToolResult]:
+def process_one_tool_call(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], index: int = 0, **kwargs) -> Optional[ToolResult]:
     tool_calls = _get_tool_calls(response.choices[0].message)
-    return process_tool_call(tool_calls[index], tools, case_insensitive=case_insensitive) if tool_calls and index < len(tool_calls) else None
+    return process_tool_call(tool_calls[index], functions, **kwargs) if tool_calls and index < len(tool_calls) else None
 
 def _get_tool_calls(message: ChatCompletionMessage) -> list[ChatCompletionMessageToolCall]:
     if hasattr(message, 'function_call') and (function_call := message.function_call):
