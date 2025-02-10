@@ -155,6 +155,7 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
     return function(**args), soft_errors
 
 def _is_list_type(annotation):
+    from typing import get_origin
     origin = get_origin(annotation)
     args = get_args(annotation)
 
@@ -242,7 +243,7 @@ def process_one_tool_call(
 
     Args:
         response (ChatCompletion): The response object containing tool calls.
-        functions (list[Callable]): A list of functions or pydantic models to call.
+        functions (list[Union[Callable, LLMFunction]]): A list of functions or pydantic models to call.
         index (int, optional): The index of the tool call to process. Defaults to 0.
         prefix_class (type, optional): A Pydantic model class to use as a prefix for the tool call.
         fix_json_args (bool, optional): Whether to attempt to fix JSON decoding errors in the arguments.
