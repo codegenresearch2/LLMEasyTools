@@ -1,23 +1,19 @@
-import json
 from typing import List, Optional, Union, Callable, Any
 from pydantic import BaseModel
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
 from llm_easy_tools.types import Function, ChatCompletionMessageToolCall, ChatCompletionMessage, ChatCompletion
+import json
+from dataclasses import dataclass
 
-class NoMatchingTool(Exception):
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
-
+@dataclass
 class ToolResult:
-    def __init__(self, tool_call_id: str, name: str, output: Optional[Union[str, BaseModel]] = None, error: Optional[Exception] = None, soft_errors: List[Exception] = [], prefix: Optional[BaseModel] = None, tool: Optional[Union[Callable, BaseModel]] = None):
-        self.tool_call_id = tool_call_id
-        self.name = name
-        self.output = output
-        self.error = error
-        self.soft_errors = soft_errors
-        self.prefix = prefix
-        self.tool = tool
+    tool_call_id: str
+    name: str
+    output: Optional[Union[str, BaseModel]] = None
+    error: Optional[Exception] = None
+    soft_errors: List[Exception] = None
+    prefix: Optional[BaseModel] = None
+    tool: Optional[Union[Callable, BaseModel]] = None
 
     def to_message(self) -> dict:
         if self.error is not None:
