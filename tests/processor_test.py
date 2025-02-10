@@ -1,6 +1,7 @@
+import pytest
 import json
-from typing import Optional, Any, Union
-from pydantic import BaseModel
+from unittest.mock import Mock
+from pydantic import BaseModel, Field, ValidationError
 from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, SimpleChoice, SimpleCompletion
 from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, _extract_prefix_unpacked, process_one_tool_call
 from llm_easy_tools import LLMFunction
@@ -27,7 +28,8 @@ def mk_chat_completion(tool_calls):
         ]
     )
 
-def test_process_methods():
+@pytest.fixture
+def setup_tools():
     class TestTool:
         def tool_method(self, arg: int) -> str:
             return f'executed tool_method with param: {arg}'
@@ -38,8 +40,10 @@ def test_process_methods():
         def failing_method(self, arg: int) -> str:
             raise Exception('Some exception')
 
-    tool = TestTool()
+    return TestTool()
 
+def test_process_methods(setup_tools):
+    tool = setup_tools
     tool_call = mk_tool_call("tool_method", {"arg": 2})
     result = process_tool_call(tool_call, [tool.tool_method])
     assert isinstance(result, ToolResult)
@@ -85,7 +89,7 @@ def test_process_complex():
 
 def test_prefixing():
     class Reflection(BaseModel):
-        relevancy: str
+        relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
 
     args = { 'relevancy': 'good', 'name': 'hammer'}
     prefix = _extract_prefix_unpacked(args, Reflection)
@@ -119,7 +123,7 @@ def test_json_fix():
 
 def test_list_in_string_fix():
     class User(BaseModel):
-        names: Optional[list[str]]
+        names: list[str] = None
 
     tool_call = mk_tool_call("User", {"names": "John, Doe"})
     result = process_tool_call(tool_call, [User])
