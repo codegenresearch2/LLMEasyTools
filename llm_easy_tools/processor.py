@@ -69,8 +69,7 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, functions_or_mod
             args = args.replace(', }', '}').replace(',}', '}')
             tool_args = json.loads(args)
         else:
-            error = e
-            stack_trace = traceback.format_exc()
+            return ToolResult(tool_call_id=tool_call.id, name=tool_name, error=e, stack_trace=traceback.format_exc())
 
     tool = next((f for f in functions_or_models if get_name(f, case_insensitive=case_insensitive) == tool_name), None)
     if tool:
@@ -95,8 +94,14 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
         field_annotation = field_info.annotation
         if _is_list_type(field_annotation):
             if field in tool_args and isinstance(tool_args[field], str):
-                tool_args[field] = split_string_to_list(tool_args[field])
-                soft_errors.append(f"Fixed JSON decode error for field {field}")
+                try:
+                    tool_args[field] = json.loads(tool_args[field])
+                except json.JSONDecodeError:
+                    if fix_json_args:
+                        tool_args[field] = split_string_to_list(tool_args[field])
+                        soft_errors.append(f"Fixed JSON decode error for field {field}")
+                    else:
+                        raise ValidationError(f"Invalid JSON format for field {field}")
 
     model_instance = model(**tool_args)
     args = {field: getattr(model_instance, field) for field in model.model_fields}
