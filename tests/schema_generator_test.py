@@ -1,7 +1,7 @@
 import pytest
 from typing import List, Optional, Union, Literal, Annotated
 from pydantic import BaseModel, Field, field_validator
-from llm_easy_tools import get_function_schema, LLMFunction
+from llm_easy_tools import get_function_schema, insert_prefix, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
 from pprint import pprint
 
@@ -44,7 +44,7 @@ def simple_function_no_docstring(
 def test_function_schema():
     function_schema = get_function_schema(simple_function)
     assert function_schema['name'] == 'simple_function'
-    assert function_schema['description'] == 'A simple function that takes two parameters: count and size.'
+    assert function_schema['description'] == 'simple function does something'
     params_schema = function_schema['parameters']
     assert len(params_schema['properties']) == 2
     assert params_schema['type'] == "object"
@@ -66,7 +66,7 @@ def test_noparams():
 
     result = get_function_schema(function_with_no_params)
     assert result['name'] == 'function_with_no_params'
-    assert result['description'] == "This function has a docstring and takes no parameters."
+    assert result['description'] == 'This function has a docstring and takes no parameters.'
     assert result['parameters']['properties'] == {}
 
     result = get_function_schema(function_no_doc)
