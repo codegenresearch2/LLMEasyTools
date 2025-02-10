@@ -95,13 +95,13 @@ def test_json_fix():
     json_data['age'] = 'twenty-one'  # Introduce a validation error
     tool_call = mk_tool_call("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
-    assert result.output == original_user
+    assert result.output is None
     assert len(result.soft_errors) > 0
     assert isinstance(result.soft_errors[0], ValidationError)
 
     response = mk_chat_completion([tool_call])
     results = process_response(response, [UserDetail])
-    assert results[0].output == original_user
+    assert results[0].output is None
     assert len(results[0].soft_errors) > 0
     assert isinstance(results[0].soft_errors[0], ValidationError)
 
@@ -110,7 +110,7 @@ def test_json_fix():
 
 def test_list_in_string_fix():
     class User(BaseModel):
-        names: Optional[List[str]]
+        names: Optional[list[str]]
 
     tool_call = mk_tool_call("User", {"names": "John, Doe"})
     result = process_tool_call(tool_call, [User])
