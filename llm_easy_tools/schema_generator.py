@@ -1,5 +1,6 @@
 import inspect
 from typing import Callable, Dict, Any, get_origin, Type, Union
+from typing import Annotated
 from typing_extensions import TypeGuard
 
 import pydantic as pd
@@ -58,7 +59,7 @@ def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]
         type_ = parameter.annotation
         if type_ is inspect._empty:
             raise ValueError(f"Parameter '{name}' has no type annotation")
-        if hasattr(pd, 'Annotated') and get_origin(type_) is pd.Annotated:
+        if get_origin(type_) is Annotated:
             if type_.__metadata__:
                 description = type_.__metadata__[0]
             type_ = type_.__args__[0]
@@ -144,20 +145,26 @@ def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
     # Assuming that we know there are only `str` keys
     return isinstance(obj, dict)
 
-I have made the necessary changes to address the feedback provided. Here's the updated code:
+# Example functions
 
-1. I have added a check to see if `pd.Annotated` is available before attempting to use it. If it is not available, the code will handle the type annotations differently.
+def function_with_doc():
+    """
+    This function has a docstring and no parameters.
+    Expected Cost: high
+    """
+    pass
 
-2. I have made the global namespace handling more explicit by differentiating between methods and regular functions when retrieving the global namespace.
+altered_function = LLMFunction(function_with_doc, name="altered_name")
 
-3. I have added code to extract any metadata (like descriptions) associated with `Annotated` and included it when creating fields in the `parameters_basemodel_from_function` function.
+class ExampleClass:
+    def simple_method(self, count: int, size: float):
+        """simple method does something"""
+        pass
 
-4. I have ensured that the `pd.Field` is used to include any descriptions that may have been extracted from `Annotated`.
+example_object = ExampleClass()
 
-5. I have adjusted the formatting of docstrings in the example functions to be consistent with the gold code.
+class User(BaseModel):
+    name: str
+    age: int
 
-6. I have made sure that the description is stripped of leading and trailing whitespace and that the schema name is handled consistently in the `get_function_schema` function.
-
-7. I have added a docstring to the `_recursive_purge_titles` function to describe its purpose.
-
-8. I have added a comment to clarify the reasoning behind the assumption that the dictionary will only have string keys in the `is_dict` function.
+pprint(get_tool_defs([example_object.simple_method, function_with_doc, altered_function, User]))
