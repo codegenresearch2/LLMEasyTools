@@ -40,13 +40,24 @@ class ToolResult:
 def process_tool_call(tool_call: ChatCompletionMessageToolCall, tools: list[Union[Callable, BaseModel]], fix_json_args=True, case_insensitive=False) -> ToolResult:
     function_call = tool_call.function
     tool_name = function_call.name
-    args = json.loads(function_call.arguments)
+    args = function_call.arguments
     soft_errors, error, stack_trace, output = [], None, None, None
+
+    try:
+        tool_args = json.loads(args)
+    except json.decoder.JSONDecodeError as e:
+        if fix_json_args:
+            soft_errors.append(e)
+            args = args.replace(', }', '}').replace(',}', '}')
+            tool_args = json.loads(args)
+        else:
+            error = e
+            stack_trace = traceback.format_exc()
 
     tool = next((t for t in tools if get_name(t, case_insensitive=case_insensitive) == tool_name), None)
     if tool:
         try:
-            output, new_soft_errors = _process_unpacked(tool, args, fix_json_args=fix_json_args)
+            output, new_soft_errors = _process_unpacked(tool, tool_args, fix_json_args=fix_json_args)
             soft_errors.extend(new_soft_errors)
         except Exception as e:
             error = e
@@ -54,7 +65,7 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, tools: list[Unio
     else:
         error = NoMatchingTool(f"Function {tool_name} not found")
 
-    return ToolResult(tool_call_id=tool_call.id, name=tool_name, arguments=args, output=output, error=error, stack_trace=stack_trace, soft_errors=soft_errors, tool=tool)
+    return ToolResult(tool_call_id=tool_call.id, name=tool_name, arguments=tool_args, output=output, error=error, stack_trace=stack_trace, soft_errors=soft_errors, tool=tool)
 
 def _process_unpacked(tool, tool_args={}, fix_json_args=True):
     if isinstance(tool, LLMFunction):
@@ -65,19 +76,26 @@ def _process_unpacked(tool, tool_args={}, fix_json_args=True):
     args = {field: getattr(model_instance, field) for field in model.model_fields}
     return tool(**args), soft_errors
 
-def process_response(response: ChatCompletion, tools: list[Union[Callable, LLMFunction]], choice_num=0, executor: Optional[ThreadPoolExecutor]=None) -> list[ToolResult]:
+def process_response(response: ChatCompletion, tools: list[Union[Callable, LLMFunction]], choice_num=0, case_insensitive=False, executor: Optional[ThreadPoolExecutor]=None) -> list[ToolResult]:
     message = response.choices[choice_num].message
-    return process_message(message, tools, executor=executor)
+    return process_message(message, tools, case_insensitive=case_insensitive, executor=executor)
 
-def process_message(message: ChatCompletionMessage, tools: list[Union[Callable, LLMFunction]], executor: Optional[ThreadPoolExecutor]=None) -> list[ToolResult]:
-    tool_calls = message.tool_calls or []
-    args_list = [(tool_call, tools) for tool_call in tool_calls]
+def process_message(message: ChatCompletionMessage, tools: list[Union[Callable, LLMFunction]], case_insensitive=False, executor: Optional[ThreadPoolExecutor]=None) -> list[ToolResult]:
+    tool_calls = _get_tool_calls(message)
+    args_list = [(tool_call, tools, case_insensitive) for tool_call in tool_calls]
     results = list(executor.map(lambda args: process_tool_call(*args), args_list)) if executor else list(map(lambda args: process_tool_call(*args), args_list))
     return results
 
-def process_one_tool_call(response: ChatCompletion, tools: list[Union[Callable, LLMFunction]], index: int = 0) -> Optional[ToolResult]:
-    tool_calls = response.choices[0].message.tool_calls
-    return process_tool_call(tool_calls[index], tools) if tool_calls and index < len(tool_calls) else None
+def process_one_tool_call(response: ChatCompletion, tools: list[Union[Callable, LLMFunction]], index: int = 0, case_insensitive=False) -> Optional[ToolResult]:
+    tool_calls = _get_tool_calls(response.choices[0].message)
+    return process_tool_call(tool_calls[index], tools, case_insensitive=case_insensitive) if tool_calls and index < len(tool_calls) else None
+
+def _get_tool_calls(message: ChatCompletionMessage) -> list[ChatCompletionMessageToolCall]:
+    if hasattr(message, 'function_call') and (function_call := message.function_call):
+        return [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
+    elif hasattr(message, 'tool_calls') and message.tool_calls:
+        return message.tool_calls
+    return []
 
 # Examples
 if __name__ == "__main__":
