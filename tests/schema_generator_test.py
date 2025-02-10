@@ -25,10 +25,26 @@ def insert_prefix(model: BaseModel, schema: dict, case_insensitive: bool = False
     schema['name'] = new_schema_name
     return schema
 
+def simple_function(count: int, size: Optional[float] = None):
+    """
+    A simple function that takes two parameters: count and size.
+    
+    Args:
+        count (int): The count of items.
+        size (Optional[float]): The size of the items.
+    """
+    pass
+
+def simple_function_no_docstring(
+        apple: Annotated[str, 'The apple'],
+        banana: Annotated[str, 'The banana']
+):
+    pass
+
 def test_function_schema():
     function_schema = get_function_schema(simple_function)
     assert function_schema['name'] == 'simple_function'
-    assert function_schema['description'] == 'simple function does something'
+    assert function_schema['description'] == 'A simple function that takes two parameters: count and size.'
     params_schema = function_schema['parameters']
     assert len(params_schema['properties']) == 2
     assert params_schema['type'] == "object"
