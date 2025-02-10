@@ -1,8 +1,7 @@
 import inspect
-from typing import Annotated, Callable, Dict, Any, get_origin, Type, Union
+from typing import Callable, Dict, Any, get_origin, Type, Union
 from typing_extensions import TypeGuard
 
-import copy
 import pydantic as pd
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
@@ -33,19 +32,13 @@ class LLMFunction:
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
 
-
-
 def tool_def(function_schema: dict) -> dict:
     return {
         "type": "function",
         "function": function_schema,
     }
 
-def get_tool_defs(
-        functions: list[Union[Callable, LLMFunction]],
-        case_insensitive: bool = False,
-        strict: bool = False
-        ) -> list[dict]:
+def get_tool_defs(functions: list[Union[Callable, LLMFunction]], case_insensitive: bool = False, strict: bool = False) -> list[dict]:
     result = []
     for function in functions:
         if isinstance(function, LLMFunction):
@@ -58,34 +51,21 @@ def get_tool_defs(
 def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]:
     fields = {}
     parameters = inspect.signature(function).parameters
-    # Get the global namespace, handling both functions and methods
-    if inspect.ismethod(function):
-        # For methods, get the class's module globals
-        function_globals = sys.modules[function.__module__].__dict__
-    else:
-        # For regular functions, use __globals__ if available
-        function_globals = getattr(function, '__globals__', {})
+    function_globals = sys.modules[function.__module__].__dict__ if inspect.ismethod(function) else getattr(function, '__globals__', {})
 
     for name, parameter in parameters.items():
-        description = None
         type_ = parameter.annotation
         if type_ is inspect._empty:
             raise ValueError(f"Parameter '{name}' has no type annotation")
-        if get_origin(type_) is Annotated:
-            if type_.__metadata__:
-                description = type_.__metadata__[0]
+        if get_origin(type_) is pd.Annotated:
             type_ = type_.__args__[0]
         if isinstance(type_, str):
-            # this happens in postponed annotation evaluation, we need to try to resolve the type
-            # if the type is not in the global namespace, we will get a NameError
             type_ = eval(type_, function_globals)
         default = PydanticUndefined if parameter.default is inspect.Parameter.empty else parameter.default
-        fields[name] = (type_, pd.Field(default, description=description))
+        fields[name] = (type_, default)
     return pd.create_model(f'{function.__name__}_ParameterModel', **fields)
 
-
 def _recursive_purge_titles(d: Dict[str, Any]) -> None:
-    """Remove a titles from a schema recursively"""
     if isinstance(d, dict):
         for key in list(d.keys()):
             if key == 'title' and "type" in d.keys():
@@ -94,14 +74,8 @@ def _recursive_purge_titles(d: Dict[str, Any]) -> None:
                 _recursive_purge_titles(d[key])
 
 def get_name(func: Union[Callable, LLMFunction], case_insensitive: bool = False) -> str:
-    if isinstance(func, LLMFunction):
-        schema_name = func.schema['name']
-    else:
-        schema_name = func.__name__
-
-    if case_insensitive:
-        schema_name = schema_name.lower()
-    return schema_name
+    schema_name = func.schema['name'] if isinstance(func, LLMFunction) else func.__name__
+    return schema_name.lower() if case_insensitive else schema_name
 
 def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict:
     if isinstance(function, LLMFunction):
@@ -109,17 +83,12 @@ def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive
             raise ValueError("Cannot case insensitive for LLMFunction")
         return function.schema
 
-    description = ''
-    if hasattr(function, '__doc__') and function.__doc__:
-        description = function.__doc__
-
-    schema_name = function.__name__
-    if case_insensitive:
-        schema_name = schema_name.lower()
+    description = function.__doc__.strip() if hasattr(function, '__doc__') and function.__doc__ else ''
+    schema_name = function.__name__.lower() if case_insensitive else function.__name__
 
     function_schema: dict[str, Any] = {
         'name': schema_name,
-        'description': description.strip(),
+        'description': description,
     }
     model = parameters_basemodel_from_function(function)
     model_json_schema = model.model_json_schema()
@@ -132,18 +101,10 @@ def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive
 
     return function_schema
 
-# copied from openai implementation which also uses Apache 2.0 license
-
 def to_strict_json_schema(schema: dict) -> dict[str, Any]:
     return _ensure_strict_json_schema(schema, path=())
 
-def _ensure_strict_json_schema(
-    json_schema: object,
-    path: tuple[str, ...],
-) -> dict[str, Any]:
-    """Mutates the given JSON schema to ensure it conforms to the `strict` standard
-    that the API expects.
-    """
+def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict[str, Any]:
     if not is_dict(json_schema):
         raise TypeError(f"Expected {json_schema} to be a dictionary; path={path}")
 
@@ -151,35 +112,22 @@ def _ensure_strict_json_schema(
     if typ == "object" and "additionalProperties" not in json_schema:
         json_schema["additionalProperties"] = False
 
-    # object types
-    # { 'type': 'object', 'properties': { 'a':  {...} } }
     properties = json_schema.get("properties")
     if is_dict(properties):
         json_schema["required"] = [prop for prop in properties.keys()]
-        json_schema["properties"] = {
-            key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key))
-            for key, prop_schema in properties.items()
-        }
+        json_schema["properties"] = {key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key)) for key, prop_schema in properties.items()}
 
-    # arrays
-    # { 'type': 'array', 'items': {...} }
     items = json_schema.get("items")
     if is_dict(items):
         json_schema["items"] = _ensure_strict_json_schema(items, path=(*path, "items"))
 
-    # unions
     any_of = json_schema.get("anyOf")
     if isinstance(any_of, list):
-        json_schema["anyOf"] = [
-            _ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i))) for i, variant in enumerate(any_of)
-        ]
+        json_schema["anyOf"] = [_ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i))) for i, variant in enumerate(any_of)]
 
-    # intersections
     all_of = json_schema.get("allOf")
     if isinstance(all_of, list):
-        json_schema["allOf"] = [
-            _ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i))) for i, entry in enumerate(all_of)
-        ]
+        json_schema["allOf"] = [_ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i))) for i, entry in enumerate(all_of)]
 
     defs = json_schema.get("$defs")
     if is_dict(defs):
@@ -188,12 +136,8 @@ def _ensure_strict_json_schema(
 
     return json_schema
 
-
 def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
-    # just pretend that we know there are only `str` keys
-    # as that check is not worth the performance cost
     return isinstance(obj, dict)
-
 
 #######################################
 #
@@ -201,10 +145,7 @@ def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
 
 if __name__ == "__main__":
     def function_with_doc():
-        """
-        This function has a docstring and no parameteres.
-        Expected Cost: high
-        """
+        """This function has a docstring and no parameters. Expected Cost: high"""
         pass
 
     altered_function = LLMFunction(function_with_doc, name="altered_name")
@@ -220,9 +161,4 @@ if __name__ == "__main__":
         name: str
         age: int
 
-    pprint(get_tool_defs([
-        example_object.simple_method, 
-        function_with_doc, 
-        altered_function,
-        User
-        ]))
+    pprint(get_tool_defs([example_object.simple_method, function_with_doc, altered_function, User]))
