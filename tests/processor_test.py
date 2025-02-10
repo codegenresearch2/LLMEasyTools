@@ -230,3 +230,57 @@ def test_additional_cases():
     assert "extra_fields" in str(result.soft_errors[0])
     assert "extra_field1" in str(result.soft_errors[0])
     assert "extra_field2" in str(result.soft_errors[0])
+
+# Updated process_tool_call function to handle extra fields
+def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_insensitive=False) -> ToolResult:
+    function_call = tool_call.function
+    tool_name = function_call.name
+    args = function_call.arguments
+    soft_errors = []
+    error = None
+    stack_trace = None
+    output = None
+    try:
+        tool_args = json.loads(args)
+    except json.decoder.JSONDecodeError as e:
+        if fix_json_args:
+            soft_errors.append(e)
+            args = args.replace(', }', '}').replace(',}', '}')
+            tool_args = json.loads(args)
+        else:
+            stack_trace = traceback.format_exc()
+            return ToolResult(tool_call_id=tool_call.id, name=tool_name, error=e, stack_trace=stack_trace)
+
+    tool = None
+    for f in functions_or_models:
+        if get_name(f, case_insensitive=case_insensitive) == tool_name:
+            tool = f
+            try:
+                output, new_soft_errors = _process_unpacked(f, tool_args, fix_json_args=fix_json_args)
+                soft_errors.extend(new_soft_errors)
+
+                # Check for extra fields in the input data
+                model = parameters_basemodel_from_function(f)
+                expected_fields = set(model.model_fields.keys())
+                input_fields = set(tool_args.keys())
+                extra_fields = input_fields - expected_fields
+                if extra_fields:
+                    error_msg = f"Extra fields found in input data: {', '.join(extra_fields)}"
+                    soft_errors.append(ValidationError(errors=[{"loc": tuple(extra_fields), "msg": error_msg}]))
+            except Exception as e:
+                error = e
+                stack_trace = traceback.format_exc()
+            break
+    else:
+        error = NoMatchingTool(f"Function {tool_name} not found")
+    result = ToolResult(
+        tool_call_id=tool_call.id,
+        name=tool_name,
+        arguments=tool_args,
+        output=output,
+        error=error,
+        stack_trace=stack_trace,
+        soft_errors=soft_errors,
+        tool=tool,
+    )
+    return result
