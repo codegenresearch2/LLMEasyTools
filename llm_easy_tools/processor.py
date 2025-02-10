@@ -56,14 +56,13 @@ class ToolResult:
             "content": content,
         }
 
-def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
+def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_insensitive=False) -> ToolResult:
     """
     Processes a tool call from a ChatCompletion response.
 
     Args:
         tool_call (ChatCompletionMessageToolCall): The tool call to process.
         functions_or_models (list): A list of functions or Pydantic models to match against the tool call.
-        prefix_class (type, optional): A Pydantic model class to use as a prefix for the tool call.
         fix_json_args (bool, optional): Whether to attempt to fix JSON decoding errors in the arguments.
         case_insensitive (bool, optional): Whether to match tool call names in a case-insensitive manner.
 
@@ -89,27 +88,10 @@ def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_jso
             stack_trace = traceback.format_exc()
             return ToolResult(tool_call_id=tool_call.id, name=tool_name, error=e, stack_trace=stack_trace)
 
-    if prefix_class is not None:
-        try:
-            prefix = _extract_prefix_unpacked(tool_args, prefix_class)
-        except ValidationError as e:
-            soft_errors.append(e)
-        prefix_name = prefix_class.__name__
-        if case_insensitive:
-            prefix_name = prefix_name.lower()
-        if not tool_name.startswith(prefix_name):
-            soft_errors.append(NoMatchingTool(f"Trying to decode function call with a name '{tool_name}' not matching prefix '{prefix_name}'"))
-        else:
-            tool_name = tool_name[len(prefix_name + '_and_'):]
-
-    tool = None
-
     for f in functions_or_models:
         if get_name(f, case_insensitive=case_insensitive) == tool_name:
-            tool = f
             try:
-                output, new_soft_errors = _process_unpacked(f, tool_args, fix_json_args=fix_json_args)
-                soft_errors.extend(new_soft_errors)
+                output = f(**tool_args)
             except Exception as e:
                 error = e
                 stack_trace = traceback.format_exc()
@@ -124,54 +106,9 @@ def process_tool_call(tool_call, functions_or_models, prefix_class=None, fix_jso
         error=error,
         stack_trace=stack_trace,
         soft_errors=soft_errors,
-        prefix=prefix,
-        tool=tool,
+        tool=f,
     )
     return result
-
-def split_string_to_list(s: str) -> list[str]:
-    try:
-        return json.loads(s)
-    except json.JSONDecodeError:
-        return [item.strip() for item in s.split(',')]
-
-def _process_unpacked(function, tool_args={}, fix_json_args=True):
-    if isinstance(function, LLMFunction):
-        function = function.func
-    model = parameters_basemodel_from_function(function)
-    soft_errors = []
-    if fix_json_args:
-        for field, field_info in model.model_fields.items():
-            field_annotation = field_info.annotation
-            if _is_list_type(field_annotation):
-                if field in tool_args and isinstance(tool_args[field], str):
-                    tool_args[field] = split_string_to_list(tool_args[field])
-                    soft_errors.append(f"Fixed JSON decode error for field {field}")
-
-    model_instance = model(**tool_args)
-    args = {}
-    for field, _ in model.model_fields.items():
-        args[field] = getattr(model_instance, field)
-    return function(**args), soft_errors
-
-def _is_list_type(annotation):
-    from typing import get_origin, get_args
-    origin = get_origin(annotation)
-    args = get_args(annotation)
-
-    if origin is list:
-        return True
-    elif origin is Union or origin is Optional:
-        return any(_is_list_type(arg) for arg in args)
-    return False
-
-def _extract_prefix_unpacked(tool_args, prefix_class):
-    prefix_args = {}
-    for key in list(tool_args.keys()):
-        if key in prefix_class.__annotations__:
-            prefix_args[key] = tool_args.pop(key)
-    prefix = prefix_class(**prefix_args)
-    return(prefix)
 
 def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
     """
@@ -194,9 +131,6 @@ def process_response(response: ChatCompletion, functions: list[Union[Callable, L
 def process_message(
     message: ChatCompletionMessage,
     functions: list[Union[Callable, LLMFunction]],
-    prefix_class=None,
-    fix_json_args=True,
-    case_insensitive=False,
     executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None
     ) -> list[ToolResult]:
     """
@@ -205,24 +139,17 @@ def process_message(
     Args:
         message (ChatCompletionMessage): The message object containing tool calls.
         functions (list[Callable]): A list of functions or pydantic models to call.
-        prefix_class (type, optional): A Pydantic model class to use as a prefix for the tool calls.
-        fix_json_args (bool, optional): Whether to attempt to fix JSON decoding errors in the arguments.
-        case_insensitive (bool, optional): Whether to match tool call names in a case-insensitive manner.
         executor (ThreadPoolExecutor, optional): An executor to use for processing tool calls in parallel.
 
     Returns:
         list[ToolResult]: A list of ToolResult objects, each representing the outcome of a processed tool call.
     """
     results = []
-    if hasattr(message, 'function_call') and (function_call:=message.function_call):
-        tool_calls = [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
-    elif hasattr(message, 'tool_calls') and message.tool_calls:
+    if hasattr(message, 'tool_calls') and message.tool_calls:
         tool_calls = message.tool_calls
     else:
         tool_calls = []
-    if not tool_calls:
-        return []
-    args_list = [(tool_call, functions, prefix_class, fix_json_args, case_insensitive) for tool_call in tool_calls]
+    args_list = [(tool_call, functions) for tool_call in tool_calls]
 
     if executor:
         results = list(executor.map(lambda args: process_tool_call(*args), args_list))
@@ -233,10 +160,7 @@ def process_message(
 def process_one_tool_call(
         response: ChatCompletion,
         functions: list[Union[Callable, LLMFunction]],
-        index: int = 0,
-        prefix_class=None,
-        fix_json_args=True,
-        case_insensitive=False
+        index: int = 0
     ) -> Optional[ToolResult]:
     """
     Processes a single tool call from a ChatCompletion response at the specified index.
@@ -245,9 +169,6 @@ def process_one_tool_call(
         response (ChatCompletion): The response object containing tool calls.
         functions (list[Union[Callable, LLMFunction]]): A list of functions or pydantic models to call.
         index (int, optional): The index of the tool call to process. Defaults to 0.
-        prefix_class (type, optional): A Pydantic model class to use as a prefix for the tool call.
-        fix_json_args (bool, optional): Whether to attempt to fix JSON decoding errors in the arguments.
-        case_insensitive (bool, optional): Whether to match tool call names in a case-insensitive manner.
 
     Returns:
         Optional[ToolResult]: A ToolResult object representing the outcome of the processed tool call, or None if the index is out of range.
@@ -256,7 +177,7 @@ def process_one_tool_call(
     if not tool_calls or index >= len(tool_calls):
         return None
 
-    return process_tool_call(tool_calls[index], functions, prefix_class, fix_json_args, case_insensitive)
+    return process_tool_call(tool_calls[index], functions)
 
 def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolCall]:
     """
@@ -268,9 +189,7 @@ def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolC
     Returns:
         list[ChatCompletionMessageToolCall]: A list of tool calls.
     """
-    if hasattr(response.choices[0].message, 'function_call') and (function_call := response.choices[0].message.function_call):
-        return [ChatCompletionMessageToolCall(id='A', function=Function(name=function_call.name, arguments=function_call.arguments), type='function')]
-    elif hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+    if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
         return response.choices[0].message.tool_calls
     return []
 
