@@ -1,6 +1,6 @@
 import pytest
 from typing import List, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from llm_easy_tools import get_function_schema, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, _recursive_purge_titles, get_name, get_tool_defs
 from pprint import pprint
@@ -15,6 +15,12 @@ def simple_function_no_docstring(apple: str, banana: str):
 class Reflection(BaseModel):
     relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
     next_actions_plan: str = Field(..., description="What you plan to do next and why")
+
+    @field_validator('relevancy')
+    def check_relevancy_length(cls, value):
+        if len(value) < 10:
+            raise ValueError("Relevancy must be at least 10 characters long")
+        return value
 
 def test_function_schema():
     function_schema = get_function_schema(simple_function)
