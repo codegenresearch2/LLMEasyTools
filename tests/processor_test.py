@@ -205,3 +205,25 @@ def test_additional_cases():
     assert len(result.soft_errors) > 0
     assert isinstance(result.soft_errors[0], ValidationError)
     assert "extra_fields" in str(result.soft_errors[0])
+
+    # Adding a test case for missing required field
+    tool_call = mk_tool_call("User", {"age": 25})
+    result = process_tool_call(tool_call, [User], fix_json_args=True)
+    assert isinstance(result.error, ValidationError)
+    assert "name" in str(result.error)
+
+    # Adding a test case for invalid data type
+    tool_call = mk_tool_call("User", {"name": "Alice", "age": "twenty-five"})
+    result = process_tool_call(tool_call, [User], fix_json_args=True)
+    assert isinstance(result.error, ValidationError)
+    assert "age" in str(result.error)
+
+    # Adding a test case for multiple extra fields
+    tool_call = mk_tool_call("User", {"name": "Alice", "age": 25, "extra_field1": "extra_value1", "extra_field2": "extra_value2"})
+    result = process_tool_call(tool_call, [User], fix_json_args=True)
+    assert result.output == User(name="Alice", age=25)
+    assert len(result.soft_errors) > 0
+    assert isinstance(result.soft_errors[0], ValidationError)
+    assert "extra_fields" in str(result.soft_errors[0])
+    assert "extra_field1" in str(result.soft_errors[0])
+    assert "extra_field2" in str(result.soft_errors[0])
