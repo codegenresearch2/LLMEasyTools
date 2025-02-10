@@ -6,6 +6,7 @@ from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, 
 from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, _extract_prefix_unpacked, process_one_tool_call
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from typing import Optional
 
 def mk_tool_call(name, args):
     arguments = json.dumps(args)
@@ -123,7 +124,7 @@ def test_json_fix():
 
 def test_list_in_string_fix():
     class User(BaseModel):
-        names: list[str] = None
+        names: Optional[list[str]] = None
 
     tool_call = mk_tool_call("User", {"names": "John, Doe"})
     result = process_tool_call(tool_call, [User])
@@ -154,6 +155,8 @@ def test_parallel_tools():
 
         def increment_counter(self):
             self.counter += 1
+            import time
+            time.sleep(1)  # Increased sleep duration to 1 second
 
     counter = CounterClass()
     tool_call = mk_tool_call("increment_counter", {})
