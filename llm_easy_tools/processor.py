@@ -155,7 +155,7 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
     return function(**args), soft_errors
 
 def _is_list_type(annotation):
-    from typing import get_origin
+    from typing import get_origin, get_args
     origin = get_origin(annotation)
     args = get_args(annotation)
 
