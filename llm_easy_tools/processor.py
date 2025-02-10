@@ -107,7 +107,7 @@ def process_response(response: ChatCompletion, functions: list[Union[Callable, L
 
 def process_message(message: ChatCompletionMessage, functions: list[Union[Callable, LLMFunction]], **kwargs) -> list[ToolResult]:
     tool_calls = _get_tool_calls(message)
-    args_list = [(tool_call, functions, **kwargs) for tool_call in tool_calls]
+    args_list = [(tool_call, functions) + tuple(kwargs.values()) for tool_call in tool_calls]
 
     if 'executor' in kwargs and kwargs['executor']:
         results = list(kwargs['executor'].map(lambda args: process_tool_call(*args), args_list))
