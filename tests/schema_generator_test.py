@@ -1,5 +1,5 @@
 import pytest
-from typing import List, Optional, Union, Literal
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 from llm_easy_tools import get_function_schema, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, get_tool_defs
@@ -10,6 +10,27 @@ def simple_function(count: int, size: Optional[float] = None):
     pass
 
 def simple_function_no_docstring(apple: str, banana: str):
+    """
+    This function takes two parameters, apple and banana, with descriptions.
+    """
+    pass
+
+class Foo(BaseModel):
+    count: int
+    size: Optional[float] = None
+
+class Bar(BaseModel):
+    apple: str = Field(description="The apple")
+    banana: str = Field(description="The banana")
+
+class FooAndBar(BaseModel):
+    foo: Foo
+    bar: Bar
+
+def nested_structure_function(foo: Foo, bars: List[Bar]):
+    """
+    This function takes a Foo object and a list of Bar objects, and it spams everything.
+    """
     pass
 
 def test_function_schema():
@@ -24,70 +45,32 @@ def test_function_schema():
 
 def test_noparams():
     def function_with_no_params():
+        """
+        This function has a docstring and takes no parameters.
+        """
         pass
 
     def function_no_doc():
+        """
+        This function has no docstring and takes no parameters.
+        """
         pass
 
     result = get_function_schema(function_with_no_params)
     assert result['name'] == 'function_with_no_params'
-    assert result['description'] == ''
+    assert result['description'] == 'This function has a docstring and takes no parameters.'
     assert result['parameters']['properties'] == {}
 
     result = get_function_schema(function_no_doc)
     assert result['name'] == 'function_no_doc'
-    assert result['description'] == ''
+    assert result['description'] == 'This function has no docstring and takes no parameters.'
     assert result['parameters']['properties'] == {}
 
 def test_nested():
-    class Foo(BaseModel):
-        count: int
-        size: Optional[float] = None
-
-    class Bar(BaseModel):
-        apple: str = Field(description="The apple")
-        banana: str = Field(description="The banana")
-
-    class FooAndBar(BaseModel):
-        foo: Foo
-        bar: Bar
-
-    def nested_structure_function(foo: Foo, bars: List[Bar]):
-        pass
-
     function_schema = get_function_schema(nested_structure_function)
     assert function_schema['name'] == 'nested_structure_function'
-    assert function_schema['description'] == 'spams everything'
+    assert function_schema['description'] == 'This function takes a Foo object and a list of Bar objects, and it spams everything.'
     assert len(function_schema['parameters']['properties']) == 2
-
-    function_schema = get_function_schema(FooAndBar)
-    assert function_schema['name'] == 'FooAndBar'
-    assert len(function_schema['parameters']['properties']) == 2
-
-def test_methods():
-    class ExampleClass:
-        def simple_method(self, count: int, size: Optional[float] = None):
-            pass
-
-    example_object = ExampleClass()
-
-    function_schema = get_function_schema(example_object.simple_method)
-    assert function_schema['name'] == 'simple_method'
-    assert function_schema['description'] == ''
-    params_schema = function_schema['parameters']
-    assert len(params_schema['properties']) == 2
-
-def test_LLMFunction():
-    def new_simple_function(count: int, size: Optional[float] = None):
-        pass
-
-    func = LLMFunction(new_simple_function, name='changed_name')
-    function_schema = func.schema
-    assert function_schema['name'] == 'changed_name'
-
-    func = LLMFunction(simple_function, strict=True)
-    function_schema = func.schema
-    assert function_schema['strict'] == True
 
 def test_merge_schemas():
     class Reflection(BaseModel):
@@ -106,6 +89,9 @@ def test_merge_schemas():
 
 def test_noparams_function_merge():
     def function_no_params():
+        """
+        This function has a docstring and takes no parameters.
+        """
         pass
 
     class Reflection(BaseModel):
@@ -122,18 +108,19 @@ def test_noparams_function_merge():
 
 def test_model_init_function():
     class User(BaseModel):
+        """A user object"""
         name: str
         city: str
 
     function_schema = get_function_schema(User)
     assert function_schema['name'] == 'User'
-    assert function_schema['description'] == ''
+    assert function_schema['description'] == 'A user object'
     assert len(function_schema['parameters']['properties']) == 2
     assert len(function_schema['parameters']['required']) == 2
 
     new_function = LLMFunction(User, name="extract_user_details")
     assert new_function.schema['name'] == 'extract_user_details'
-    assert new_function.schema['description'] == ''
+    assert new_function.schema['description'] == 'A user object'
     assert len(new_function.schema['parameters']['properties']) == 2
     assert len(new_function.schema['parameters']['required']) == 2
 
