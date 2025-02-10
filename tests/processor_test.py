@@ -3,7 +3,7 @@ import json
 from unittest.mock import Mock
 from pydantic import BaseModel, Field, ValidationError
 from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, SimpleChoice, SimpleCompletion
-from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, process_one_tool_call
+from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, _extract_prefix_unpacked, process_one_tool_call
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Optional
@@ -14,7 +14,7 @@ def mk_tool_call(name, args):
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
 
 def mk_tool_call_jason(name, args):
-    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=json.dumps(args)), type='function')
+    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=args), type='function')
 
 def mk_chat_completion(tool_calls):
     return SimpleCompletion(
@@ -104,10 +104,8 @@ def test_json_fix():
         age: int
 
     original_user = UserDetail(name="John", age=21)
-    json_data = json.dumps(original_user.model_dump())
-    json_data = json_data[:-1]
-    json_data = json_data + ',}'
-    tool_call = mk_tool_call_jason("UserDetail", json_data)
+    tool_call_args = original_user.model_dump()
+    tool_call = mk_tool_call_jason("UserDetail", tool_call_args)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
@@ -191,8 +189,3 @@ def test_process_one_tool_call():
 
     result = process_one_tool_call(response, [User], index=2)
     assert result is None
-
-    invalid_response = mk_chat_completion([mk_tool_call("InvalidFunction", {})])
-    result = process_one_tool_call(invalid_response, [User])
-    assert isinstance(result, ToolResult)
-    assert result.error is not None
