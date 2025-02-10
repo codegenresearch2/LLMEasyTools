@@ -21,8 +21,8 @@ def test_function_schema():
     assert function_schema['description'] == 'simple function does something'
     params_schema = function_schema['parameters']
     assert len(params_schema['properties']) == 2
-    assert params_schema['type'] == "object"
-    assert params_schema['properties']['count']['type'] == "integer"
+    assert params_schema['type'] == 'object'
+    assert params_schema['properties']['count']['type'] == 'integer'
     assert 'size' in params_schema['properties']
     assert 'title' not in params_schema
     assert 'title' not in params_schema['properties']['count']
@@ -38,7 +38,7 @@ def test_noparams():
 
     result = get_function_schema(function_with_no_params)
     assert result['name'] == 'function_with_no_params'
-    assert result['description'] == "This function has a docstring and takes no parameters."
+    assert result['description'] == 'This function has a docstring and takes no parameters.'
     assert result['parameters']['properties'] == {}
 
     result = get_function_schema(function_no_doc)
@@ -52,8 +52,9 @@ def test_nested():
         size: Optional[float] = None
 
     class Bar(BaseModel):
-        apple: str = Field(description="The apple")
-        banana: str = Field(description="The banana")
+        """Some Bar"""
+        apple: str = Field(description='The apple')
+        banana: str = Field(description='The banana')
 
     class FooAndBar(BaseModel):
         foo: Foo
@@ -102,12 +103,12 @@ def test_LLMFunction():
 
 def test_merge_schemas():
     class Reflection(BaseModel):
-        relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
-        next_actions_plan: str = Field(..., description="What you plan to do next and why")
+        relevancy: str = Field(..., description='Whas the last retrieved information relevant and why?')
+        next_actions_plan: str = Field(..., description='What you plan to do next and why')
 
     function_schema = get_function_schema(simple_function)
     new_schema = insert_prefix(Reflection, function_schema)
-    assert new_schema['name'] == "Reflection_and_simple_function"
+    assert new_schema['name'] == 'Reflection_and_simple_function'
     assert len(new_schema['parameters']['properties']) == 4
     assert len(new_schema['parameters']['required']) == 3
     assert len(function_schema['parameters']['properties']) == 2
@@ -117,15 +118,15 @@ def test_merge_schemas():
 
     function_schema = get_function_schema(simple_function)
     new_schema = insert_prefix(Reflection, function_schema, case_insensitive=True)
-    assert new_schema['name'] == "reflection_and_simple_function"
+    assert new_schema['name'] == 'reflection_and_simple_function'
 
 def test_noparams_function_merge():
     def function_no_params() -> None:
         pass
 
     class Reflection(BaseModel):
-        relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
-        next_actions_plan: str = Field(..., description="What you plan to do next and why")
+        relevancy: str = Field(..., description='Whas the last retrieved information relevant and why?')
+        next_actions_plan: str = Field(..., description='What you plan to do next and why')
 
     function_schema = get_function_schema(function_no_params)
     assert function_schema['name'] == 'function_no_params'
@@ -147,7 +148,7 @@ def test_model_init_function():
     assert len(function_schema['parameters']['properties']) == 2
     assert len(function_schema['parameters']['required']) == 2
 
-    new_function = LLMFunction(User, name="extract_user_details")
+    new_function = LLMFunction(User, name='extract_user_details')
     assert new_function.schema['name'] == 'extract_user_details'
     assert new_function.schema['description'] == 'A user object'
     assert len(new_function.schema['parameters']['properties']) == 2
@@ -165,7 +166,7 @@ def test_case_insensitivity():
 
 def test_function_no_type_annotation():
     def function_with_missing_type(param) -> str:
-        return f"Value is {param}"
+        return f'Value is {param}'
 
     with pytest.raises(ValueError) as exc_info:
         get_function_schema(function_with_missing_type)
