@@ -55,6 +55,9 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, functions_or_mod
             except json.decoder.JSONDecodeError:
                 error = e
                 stack_trace = traceback.format_exc()
+        else:
+            error = e
+            stack_trace = traceback.format_exc()
 
     tool = next((f for f in functions_or_models if get_name(f, case_insensitive=case_insensitive) == tool_name), None)
 
@@ -86,7 +89,10 @@ def _process_unpacked(function: Union[Callable, BaseModel], tool_args: dict[str,
                     soft_errors.append(f"Failed to parse JSON for field {field}")
                 else:
                     if isinstance(tool_args[field], str):
-                        tool_args[field] = split_string_to_list(tool_args[field])
+                        try:
+                            tool_args[field] = json.loads(tool_args[field])
+                        except json.JSONDecodeError:
+                            tool_args[field] = split_string_to_list(tool_args[field])
 
     model_instance = model(**tool_args)
     args = {field: getattr(model_instance, field) for field in model.model_fields}
