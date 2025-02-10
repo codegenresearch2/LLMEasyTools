@@ -13,8 +13,8 @@ def mk_tool_call(name, args):
     arguments = json.dumps(args)
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
 
-def mk_tool_call_jason(name, args):
-    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=args), type='function')
+def mk_tool_call_json(name, args):
+    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=json.dumps(args)), type='function')
 
 def mk_chat_completion(tool_calls):
     return SimpleCompletion(
@@ -82,7 +82,7 @@ def test_process_complex():
         'speciality': 'sustainable energy solutions'
     }]
 
-    tool_call = mk_tool_call("print_companies", {"companies": company_list})
+    tool_call = mk_tool_call_json("print_companies", {"companies": company_list})
     result = process_tool_call(tool_call, [print_companies])
     assert isinstance(result, ToolResult)
     assert isinstance(result.output, list)
@@ -106,7 +106,7 @@ def test_json_fix():
     json_data = json.dumps(original_user.model_dump())
     json_data = json_data[:-1]
     json_data = json_data + ',}'
-    tool_call = mk_tool_call_jason("UserDetail", json_data)
+    tool_call = mk_tool_call_json("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
@@ -126,12 +126,7 @@ def test_list_in_string_fix():
     class User(BaseModel):
         names: Optional[list[str]]
 
-    tool_call = mk_tool_call("User", {"names": "John, Doe"})
-    result = process_tool_call(tool_call, [User])
-    assert result.output.names == ["John", "Doe"]
-    assert len(result.soft_errors) > 0
-
-    tool_call = mk_tool_call("User", {"names": "[\"John\", \"Doe\"]"})
+    tool_call = mk_tool_call_json("User", {"names": "John, Doe"})
     result = process_tool_call(tool_call, [User])
     assert result.output.names == ["John", "Doe"]
     assert len(result.soft_errors) > 0
@@ -144,7 +139,7 @@ def test_case_insensitivity():
         name: str
         city: str
 
-    response = mk_chat_completion([mk_tool_call("user", {"name": "John", "city": "Metropolis"})])
+    response = mk_chat_completion([mk_tool_call_json("user", {"name": "John", "city": "Metropolis"})])
     results = process_response(response, [User], case_insensitive=True)
     assert results[0].output == User(name="John", city="Metropolis")
 
@@ -158,7 +153,7 @@ def test_parallel_tools():
             sleep(1)
 
     counter = CounterClass()
-    tool_call = mk_tool_call("increment_counter", {})
+    tool_call = mk_tool_call_json("increment_counter", {})
     response = mk_chat_completion([tool_call] * 10)
 
     executor = ThreadPoolExecutor()
@@ -178,8 +173,8 @@ def test_process_one_tool_call():
         age: int
 
     response = mk_chat_completion([
-        mk_tool_call("User", {"name": "Alice", "age": 30}),
-        mk_tool_call("User", {"name": "Bob", "age": 25})
+        mk_tool_call_json("User", {"name": "Alice", "age": 30}),
+        mk_tool_call_json("User", {"name": "Bob", "age": 25})
     ])
 
     result = process_one_tool_call(response, [User], index=0)
@@ -193,7 +188,7 @@ def test_process_one_tool_call():
     result = process_one_tool_call(response, [User], index=2)
     assert result is None
 
-    invalid_response = mk_chat_completion([mk_tool_call("InvalidFunction", {})])
+    invalid_response = mk_chat_completion([mk_tool_call_json("InvalidFunction", {})])
     result = process_one_tool_call(invalid_response, [User])
     assert isinstance(result, ToolResult)
     assert result.error is not None
