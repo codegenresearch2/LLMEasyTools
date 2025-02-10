@@ -1,5 +1,5 @@
-from .schema_generator import get_tool_defs, LLMFunction
-from .processor import process_response
+from .schema_generator import get_function_schema, get_tool_defs, LLMFunction
+from .processor import process_response, process_message, process_tool_call, ToolResult
 
 def process_functions(functions):
     simplified_functions = []
