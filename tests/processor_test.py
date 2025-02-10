@@ -194,10 +194,12 @@ def test_additional_cases():
     tool_call = mk_tool_call("User", {"name": "Alice"})
     result = process_tool_call(tool_call, [User], fix_json_args=True)
     assert isinstance(result.error, ValidationError)
+    assert "age" in str(result.error)
 
     tool_call = mk_tool_call("User", {"name": "Alice", "age": "twenty"})
     result = process_tool_call(tool_call, [User], fix_json_args=True)
     assert isinstance(result.error, ValidationError)
+    assert "age" in str(result.error)
 
     tool_call = mk_tool_call("User", {"name": "Alice", "age": 25, "extra_field": "extra_value"})
     result = process_tool_call(tool_call, [User], fix_json_args=True)
