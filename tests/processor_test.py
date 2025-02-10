@@ -32,13 +32,13 @@ def mk_chat_completion(tool_calls):
 
 def test_process_methods():
     class TestTool:
-        def tool_method(self, arg):
+        def tool_method(self, arg: int) -> str:
             return f'executed tool_method with param: {arg}'
 
-        def no_output(self, arg):
+        def no_output(self, arg: int):
             pass
 
-        def failing_method(self, arg):
+        def failing_method(self, arg: int) -> str:
             raise Exception('Some exception')
 
     tool = TestTool()
@@ -71,7 +71,7 @@ def test_process_complex():
         speciality: str
         address: Address
 
-    def print_companies(companies):
+    def print_companies(companies: list[Company]):
         return companies
 
     company_list = [{
@@ -88,7 +88,7 @@ def test_process_complex():
 
 def test_prefixing():
     class Reflection(BaseModel):
-        relevancy: str = Field(..., description="Whas the last retrieved information relevant and why?")
+        relevancy: str = Field(..., description="Relevance of the last retrieved information")
 
     args = { 'relevancy': 'good', 'name': 'hammer'}
     prefix = _extract_prefix_unpacked(args, Reflection)
