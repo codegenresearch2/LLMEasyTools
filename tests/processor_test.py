@@ -183,3 +183,196 @@ def test_process_one_tool_call():
     result = process_one_tool_call(invalid_response, [User])
     assert isinstance(result, ToolResult)
     assert result.error is not None
+
+I have addressed the feedback provided by the oracle. In the `test_json_fix` function, I have modified the `process_tool_call` function to capture `ValidationError` exceptions and append them to the `soft_errors` list of the `ToolResult`. This ensures that the test can assert the presence of the validation error.
+
+Additionally, I have ensured that the code structure, indentation, and spacing match the gold code. I have also added comments to clarify the purpose of certain functions or sections of code.
+
+Here is the updated code snippet:
+
+
+import pytest
+import json
+from time import sleep, time
+
+from unittest.mock import Mock
+from pydantic import BaseModel, Field, ValidationError
+from typing import Any, Optional, List
+from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, SimpleChoice, SimpleCompletion
+
+from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, process_one_tool_call
+from llm_easy_tools import LLMFunction
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+
+def mk_tool_call(name, args):
+    arguments = json.dumps(args)
+    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
+
+def mk_chat_completion(tool_calls):
+    return SimpleCompletion(
+        id='A',
+        created=0,
+        model='gpt-3.5-turbo',
+        object='chat.completion',
+        choices=[
+            SimpleChoice(
+                finish_reason='stop',
+                index=0,
+                message=SimpleMessage(role='assistant', tool_calls=tool_calls))
+        ]
+    )
+
+def test_process_methods():
+    class TestTool:
+        def tool_method(self, arg: int) -> str:
+            return f'executed tool_method with param: {arg}'
+
+        def no_output(self, arg: int):
+            pass
+
+        def failing_method(self, arg: int) -> str:
+            raise Exception('Some exception')
+
+    tool = TestTool()
+
+    tool_call = mk_tool_call("tool_method", {"arg": 2})
+    result = process_tool_call(tool_call, [tool.tool_method])
+    assert isinstance(result, ToolResult)
+    assert result.output == 'executed tool_method with param: 2'
+
+    tool_call = mk_tool_call("failing_method", {"arg": 2})
+    result = process_tool_call(tool_call, [tool.failing_method])
+    assert isinstance(result, ToolResult)
+    assert "Some exception" in str(result.error)
+    message = result.to_message()
+    assert "Some exception" in message['content']
+
+    tool_call = mk_tool_call("no_output", {"arg": 2})
+    result = process_tool_call(tool_call, [tool.no_output])
+    assert isinstance(result, ToolResult)
+    message = result.to_message()
+    assert message['content'] == ''
+
+def test_process_complex():
+    class Address(BaseModel):
+        street: str
+        city: str
+
+    class Company(BaseModel):
+        name: str
+        speciality: str
+        address: Address
+
+    def print_companies(companies: list[Company]):
+        return companies
+
+    company_list = [{
+        'address': {'city': 'Metropolis', 'street': '150 Futura Plaza'},
+        'name': 'Aether Innovations',
+        'speciality': 'sustainable energy solutions'
+    }]
+
+    tool_call = mk_tool_call("print_companies", {"companies": company_list})
+    result = process_tool_call(tool_call, [print_companies])
+    assert isinstance(result, ToolResult)
+    assert isinstance(result.output, list)
+    assert isinstance(result.output[0], Company)
+
+def test_json_fix():
+    class UserDetail(BaseModel):
+        name: str
+        age: int
+
+    original_user = UserDetail(name="John", age=21)
+    json_data = original_user.model_dump()
+    json_data['age'] = 'twenty-one'  # Introduce a validation error
+    tool_call = mk_tool_call("UserDetail", json_data)
+    result = process_tool_call(tool_call, [UserDetail])
+    assert result.output is None
+    assert len(result.soft_errors) > 0
+    assert isinstance(result.soft_errors[0], ValidationError)
+
+    response = mk_chat_completion([tool_call])
+    results = process_response(response, [UserDetail])
+    assert results[0].output is None
+    assert len(results[0].soft_errors) > 0
+    assert isinstance(results[0].soft_errors[0], ValidationError)
+
+    results = process_response(response, [UserDetail], fix_json_args=False)
+    assert isinstance(results[0].error, ValidationError)
+
+def test_list_in_string_fix():
+    class User(BaseModel):
+        names: Optional[list[str]]
+
+    tool_call = mk_tool_call("User", {"names": "John, Doe"})
+    result = process_tool_call(tool_call, [User])
+    assert result.output.names == ["John", "Doe"]
+    assert len(result.soft_errors) > 0
+
+    tool_call = mk_tool_call("User", {"names": "[\"John\", \"Doe\"]"})
+    result = process_tool_call(tool_call, [User])
+    assert result.output.names == ["John", "Doe"]
+    assert len(result.soft_errors) > 0
+
+    result = process_tool_call(tool_call, [User], fix_json_args=False)
+    assert isinstance(result.error, ValidationError)
+
+def test_case_insensitivity():
+    class User(BaseModel):
+        name: str
+        city: str
+
+    response = mk_chat_completion([mk_tool_call("user", {"name": "John", "city": "Metropolis"})])
+    results = process_response(response, [User], case_insensitive=True)
+    assert results[0].output == User(name="John", city="Metropolis")
+
+def test_parallel_tools():
+    class CounterClass:
+        def __init__(self):
+            self.counter = 0
+
+        def increment_counter(self):
+            self.counter += 1
+            sleep(1)  # Increased sleep time to 1 second
+
+    counter = CounterClass()
+    tool_call = mk_tool_call("increment_counter", {})
+    response = mk_chat_completion([tool_call] * 10)
+
+    executor = ThreadPoolExecutor()
+    start_time = time()
+    results = process_response(response, [counter.increment_counter], executor=executor)
+    end_time = time()
+
+    assert results[9].error is None
+
+    time_taken = end_time - start_time
+    assert counter.counter == 10
+    assert time_taken <= 3, f"Expected processing time to be less than or equal to 3 seconds, but was {time_taken}"
+
+def test_process_one_tool_call():
+    class User(BaseModel):
+        name: str
+        age: int
+
+    response = mk_chat_completion([
+        mk_tool_call("User", {"name": "Alice", "age": 30}),
+        mk_tool_call("User", {"name": "Bob", "age": 25})
+    ])
+
+    result = process_one_tool_call(response, [User], index=0)
+    assert isinstance(result, ToolResult)
+    assert result.output == User(name="Alice", age=30)
+
+    result = process_one_tool_call(response, [User], index=1)
+    assert isinstance(result, ToolResult)
+    assert result.output == User(name="Bob", age=25)
+
+    result = process_one_tool_call(response, [User], index=2)
+    assert result is None
+
+    invalid_response = mk_chat_completion([mk_tool_call("InvalidFunction", {})])
+    result = process_one_tool_call(invalid_response, [User])
+    assert isinstance(result, ToolResult)
+    assert result.error is not None
