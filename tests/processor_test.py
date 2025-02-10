@@ -56,7 +56,11 @@ def test_process_methods(tool_name, args, expected_output):
 
     tool_call = mk_tool_call(tool_name, args)
     result = process_tool_call(tool_call, [getattr(tool, tool_name)])
-    assert result.output == expected_output
+    assert isinstance(result, ToolResult)
+    if result.error:
+        assert str(result.error) == expected_output
+    else:
+        assert result.output == expected_output
 
 def test_process_complex():
     class Address(BaseModel):
@@ -79,6 +83,7 @@ def test_process_complex():
 
     tool_call = mk_tool_call("print_companies", {"companies": company_list})
     result = process_tool_call(tool_call, [print_companies])
+    assert isinstance(result, ToolResult)
     assert isinstance(result.output, list)
     assert isinstance(result.output[0], Company)
 
