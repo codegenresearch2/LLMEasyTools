@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 import copy
-from pprint import pprint
 import sys
 
 class LLMFunction:
@@ -173,7 +172,7 @@ if __name__ == "__main__":
         name: str
         age: int
 
-    pprint(get_tool_defs([
+    print(get_tool_defs([
         example_object.simple_method,
         function_with_doc,
         altered_function,
