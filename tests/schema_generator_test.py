@@ -19,6 +19,9 @@ class Foo(BaseModel):
     size: Optional[float] = None
 
 class Bar(BaseModel):
+    """
+    A class representing a bar with apple and banana attributes.
+    """
     apple: str = Field(description="The apple")
     banana: str = Field(description="The banana")
 
@@ -71,6 +74,9 @@ def test_nested():
         size: Optional[float] = None
 
     class Bar(BaseModel):
+        """
+        A class representing a bar with apple and banana attributes.
+        """
         apple: str = Field(description="The apple")
         banana: str = Field(description="The banana")
 
