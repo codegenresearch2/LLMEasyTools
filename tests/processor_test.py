@@ -35,12 +35,15 @@ def mk_chat_completion(tool_calls):
 def test_process_methods():
     class TestTool:
         def tool_method(self, arg: int) -> str:
+            """A test method that returns a string with the input argument."""
             return f'executed tool_method with param: {arg}'
 
         def no_output(self, arg: int):
+            """A test method that does not return any output."""
             pass
 
         def failing_method(self, arg: int) -> str:
+            """A test method that raises an exception."""
             raise Exception('Some exception')
 
     tool = TestTool()
@@ -65,15 +68,18 @@ def test_process_methods():
 
 def test_process_complex():
     class Address(BaseModel):
+        """A test model representing an address."""
         street: str
         city: str
 
     class Company(BaseModel):
+        """A test model representing a company."""
         name: str
         speciality: str
         address: Address
 
     def print_companies(companies: list[Company]):
+        """A test function that returns the input list of companies."""
         return companies
 
     company_list = [{
@@ -90,6 +96,7 @@ def test_process_complex():
 
 def test_json_fix():
     class UserDetail(BaseModel):
+        """A test model representing user details."""
         name: str
         age: int
 
@@ -115,6 +122,7 @@ def test_json_fix():
 
 def test_list_in_string_fix():
     class User(BaseModel):
+        """A test model representing a user."""
         names: Optional[list[str]]
 
     tool_call = mk_tool_call("User", {"names": "John, Doe"})
@@ -132,6 +140,7 @@ def test_list_in_string_fix():
 
 def test_case_insensitivity():
     class User(BaseModel):
+        """A test model representing a user."""
         name: str
         city: str
 
@@ -141,10 +150,12 @@ def test_case_insensitivity():
 
 def test_parallel_tools():
     class CounterClass:
+        """A test class with a counter that can be incremented."""
         def __init__(self):
             self.counter = 0
 
         def increment_counter(self):
+            """A test method that increments the counter and sleeps for 1 second."""
             self.counter += 1
             sleep(1)
 
@@ -165,6 +176,7 @@ def test_parallel_tools():
 
 def test_process_one_tool_call():
     class User(BaseModel):
+        """A test model representing a user."""
         name: str
         age: int
 
