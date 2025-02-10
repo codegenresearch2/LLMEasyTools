@@ -70,7 +70,7 @@ def test_process_complex():
         speciality: str
         address: Address
 
-    def print_companies(companies: List[Company]):
+    def print_companies(companies: list[Company]):
         return companies
 
     company_list = [{
@@ -91,18 +91,22 @@ def test_json_fix():
         age: int
 
     original_user = UserDetail(name="John", age=21)
-    tool_call = mk_tool_call("UserDetail", original_user.model_dump())
+    json_data = original_user.model_dump()
+    json_data['age'] = 'twenty-one'  # Introduce a validation error
+    tool_call = mk_tool_call("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
+    assert isinstance(result.soft_errors[0], ValidationError)
 
     response = mk_chat_completion([tool_call])
     results = process_response(response, [UserDetail])
     assert results[0].output == original_user
     assert len(results[0].soft_errors) > 0
+    assert isinstance(results[0].soft_errors[0], ValidationError)
 
     results = process_response(response, [UserDetail], fix_json_args=False)
-    assert isinstance(results[0].error, json.decoder.JSONDecodeError)
+    assert isinstance(results[0].error, ValidationError)
 
 def test_list_in_string_fix():
     class User(BaseModel):
