@@ -6,7 +6,7 @@ from typing import Callable, Union, Optional, Any
 from pydantic import BaseModel, ValidationError
 from dataclasses import dataclass, field
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
-from llm_easy_tools.types import Function, ChatCompletionMessageToolCall, ChatCompletionMessage
+from llm_easy_tools.types import Function, ChatCompletionMessageToolCall, ChatCompletionMessage, ChatCompletion
 
 class NoMatchingTool(Exception):
     def __init__(self, message):
@@ -197,6 +197,7 @@ def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolC
 
 if __name__ == "__main__":
     from llm_easy_tools.types import mk_chat_with_tool_call
+    from pprint import pprint
 
     def original_function():
         return 'Result of function_decorated'
@@ -213,13 +214,13 @@ if __name__ == "__main__":
         name: str
         email: str
 
-    print(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
+    pprint(process_response(mk_chat_with_tool_call('altered_name', {}), [function_decorated]))
     call_to_altered_name = mk_chat_with_tool_call('altered_name', {}).choices[0].message.tool_calls[0]
-    print(call_to_altered_name)
-    print(process_tool_call(call_to_altered_name, [function_decorated]))
+    pprint(call_to_altered_name)
+    pprint(process_tool_call(call_to_altered_name, [function_decorated]))
 
     call_to_simple_method = mk_chat_with_tool_call('simple_method', {"count": 1, "size": 2.2}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_simple_method, [example_object.simple_method]))
+    pprint(process_tool_call(call_to_simple_method, [example_object.simple_method]))
 
     call_to_model = mk_chat_with_tool_call('User', {"name": 'John', "email": 'john@example.com'}).choices[0].message.tool_calls[0]
-    print(process_tool_call(call_to_model, [User]))
+    pprint(process_tool_call(call_to_model, [User]))
