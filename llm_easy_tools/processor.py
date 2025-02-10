@@ -56,6 +56,25 @@ class ToolResult:
             "content": content,
         }
 
+def _process_unpacked(function, tool_args={}, fix_json_args=True):
+    if isinstance(function, LLMFunction):
+        function = function.func
+    model = parameters_basemodel_from_function(function)
+    soft_errors = []
+    if fix_json_args:
+        for field, field_info in model.model_fields.items():
+            field_annotation = field_info.annotation
+            if get_origin(field_annotation) is list:
+                if field in tool_args and isinstance(tool_args[field], str):
+                    tool_args[field] = json.loads(tool_args[field])
+                    soft_errors.append(f"Fixed JSON decode error for field {field}")
+
+    model_instance = model(**tool_args)
+    args = {}
+    for field, _ in model.model_fields.items():
+        args[field] = getattr(model_instance, field)
+    return function(**args), soft_errors
+
 def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_insensitive=False) -> ToolResult:
     """
     Processes a tool call from a ChatCompletion response.
@@ -91,7 +110,8 @@ def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_i
     for f in functions_or_models:
         if get_name(f, case_insensitive=case_insensitive) == tool_name:
             try:
-                output = f(**tool_args)
+                output, new_soft_errors = _process_unpacked(f, tool_args, fix_json_args=fix_json_args)
+                soft_errors.extend(new_soft_errors)
             except Exception as e:
                 error = e
                 stack_trace = traceback.format_exc()
@@ -126,7 +146,7 @@ def process_response(response: ChatCompletion, functions: list[Union[Callable, L
         list[ToolResult]: A list of ToolResult objects, each representing the outcome of a processed tool call.
     """
     message = response.choices[choice_num].message
-    return process_message(message, functions, **kwargs)
+    return process_message(message, functions)
 
 def process_message(
     message: ChatCompletionMessage,
