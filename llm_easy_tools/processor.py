@@ -141,7 +141,7 @@ def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_i
     )
     return result
 
-def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, **kwargs) -> list[ToolResult]:
+def process_response(response: ChatCompletion, functions: list[Union[Callable, LLMFunction]], choice_num=0, fix_json_args=True, case_insensitive=False, executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None) -> list[ToolResult]:
     """
     Processes a ChatCompletion response, executing contained tool calls.
     For each tool call matches a function from the 'functions' list by name.
@@ -152,16 +152,21 @@ def process_response(response: ChatCompletion, functions: list[Union[Callable, L
         response (ChatCompletion): The response object containing tool calls.
         functions (list[Callable]): A list of functions or pydantic models to call.
         choice_num (int, optional): The index of the choice to process from the response. Defaults to 0.
+        fix_json_args (bool, optional): Whether to fix JSON decoding errors in the arguments.
+        case_insensitive (bool, optional): Whether to match tool call names in a case-insensitive manner.
+        executor (ThreadPoolExecutor, optional): An executor to use for processing tool calls in parallel.
 
     Returns:
         list[ToolResult]: A list of ToolResult objects, each representing the outcome of a processed tool call.
     """
     message = response.choices[choice_num].message
-    return process_message(message, functions, **kwargs)
+    return process_message(message, functions, fix_json_args=fix_json_args, case_insensitive=case_insensitive, executor=executor)
 
 def process_message(
     message: ChatCompletionMessage,
     functions: list[Union[Callable, LLMFunction]],
+    fix_json_args=True,
+    case_insensitive=False,
     executor: Union[ThreadPoolExecutor, ProcessPoolExecutor, None]=None
     ) -> list[ToolResult]:
     """
@@ -170,6 +175,8 @@ def process_message(
     Args:
         message (ChatCompletionMessage): The message object containing tool calls.
         functions (list[Callable]): A list of functions or pydantic models to call.
+        fix_json_args (bool, optional): Whether to fix JSON decoding errors in the arguments.
+        case_insensitive (bool, optional): Whether to match tool call names in a case-insensitive manner.
         executor (ThreadPoolExecutor, optional): An executor to use for processing tool calls in parallel.
 
     Returns:
@@ -180,7 +187,7 @@ def process_message(
         tool_calls = message.tool_calls
     else:
         tool_calls = []
-    args_list = [(tool_call, functions) for tool_call in tool_calls]
+    args_list = [(tool_call, functions, fix_json_args, case_insensitive) for tool_call in tool_calls]
 
     if executor:
         results = list(executor.map(lambda args: process_tool_call(*args), args_list))
@@ -191,7 +198,9 @@ def process_message(
 def process_one_tool_call(
         response: ChatCompletion,
         functions: list[Union[Callable, LLMFunction]],
-        index: int = 0
+        index: int = 0,
+        fix_json_args=True,
+        case_insensitive=False
     ) -> Optional[ToolResult]:
     """
     Processes a single tool call from a ChatCompletion response at the specified index.
@@ -200,6 +209,8 @@ def process_one_tool_call(
         response (ChatCompletion): The response object containing tool calls.
         functions (list[Union[Callable, LLMFunction]]): A list of functions or pydantic models to call.
         index (int, optional): The index of the tool call to process. Defaults to 0.
+        fix_json_args (bool, optional): Whether to fix JSON decoding errors in the arguments.
+        case_insensitive (bool, optional): Whether to match tool call names in a case-insensitive manner.
 
     Returns:
         Optional[ToolResult]: A ToolResult object representing the outcome of the processed tool call, or None if the index is out of range.
@@ -208,7 +219,7 @@ def process_one_tool_call(
     if not tool_calls or index >= len(tool_calls):
         return None
 
-    return process_tool_call(tool_calls[index], functions)
+    return process_tool_call(tool_calls[index], functions, fix_json_args, case_insensitive)
 
 def _get_tool_calls(response: ChatCompletion) -> list[ChatCompletionMessageToolCall]:
     """
