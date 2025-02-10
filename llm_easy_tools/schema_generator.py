@@ -10,7 +10,7 @@ from pydantic_core import PydanticUndefined
 from pprint import pprint
 
 class LLMFunction:
-    def __init__(self, func, schema=None, name=None, description=None, strict=False):
+    def __init__(self, func: Callable, schema: dict = None, name: str = None, description: str = None, strict: bool = False):
         self.func = func
         self.__name__ = func.__name__
         self.__doc__ = func.__doc__
@@ -76,7 +76,7 @@ def _recursive_purge_titles(d: Dict[str, Any]) -> None:
             else:
                 _recursive_purge_titles(d[key])
 
-def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict:
+def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool = False, strict: bool = False) -> dict:
     if isinstance(function, LLMFunction):
         if case_insensitive:
             raise ValueError("Cannot case insensitive for LLMFunction")
