@@ -39,7 +39,11 @@ def tool_def(function_schema: dict) -> dict:
         "function": function_schema,
     }
 
-def get_tool_defs(functions: list[Union[Callable, LLMFunction]], case_insensitive: bool = False, strict: bool = False) -> list[dict]:
+def get_tool_defs(
+    functions: list[Union[Callable, LLMFunction]],
+    case_insensitive: bool = False,
+    strict: bool = False
+) -> list[dict]:
     result = []
     for function in functions:
         if isinstance(function, LLMFunction):
@@ -147,24 +151,30 @@ def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
 
 # Example functions
 
-def function_with_doc():
-    """
-    This function has a docstring and no parameters.
-    Expected Cost: high
-    """
-    pass
-
-altered_function = LLMFunction(function_with_doc, name="altered_name")
-
-class ExampleClass:
-    def simple_method(self, count: int, size: float):
-        """simple method does something"""
+if __name__ == "__main__":
+    def function_with_doc():
+        """
+        This function has a docstring and no parameters.
+        Expected Cost: high
+        """
         pass
 
-example_object = ExampleClass()
+    altered_function = LLMFunction(function_with_doc, name="altered_name")
 
-class User(BaseModel):
-    name: str
-    age: int
+    class ExampleClass:
+        def simple_method(self, count: int, size: float):
+            """simple method does something"""
+            pass
 
-pprint(get_tool_defs([example_object.simple_method, function_with_doc, altered_function, User]))
+    example_object = ExampleClass()
+
+    class User(BaseModel):
+        name: str
+        age: int
+
+    pprint(get_tool_defs([
+        example_object.simple_method,
+        function_with_doc,
+        altered_function,
+        User
+    ]))
