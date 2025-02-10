@@ -2,7 +2,7 @@ import json
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Callable, Union, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from dataclasses import dataclass, field
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
 from llm_easy_tools.types import ChatCompletion, ChatCompletionMessageToolCall, ChatCompletionMessage, Function
@@ -56,6 +56,17 @@ class ToolResult:
             "content": content,
         }
 
+def _is_list_type(annotation):
+    from typing import get_origin, List
+    origin = get_origin(annotation)
+    return origin is List
+
+def split_string_to_list(s: str) -> list[str]:
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return [item.strip() for item in s.split(',')]
+
 def _process_unpacked(function, tool_args={}, fix_json_args=True):
     if isinstance(function, LLMFunction):
         function = function.func
@@ -64,9 +75,9 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
     if fix_json_args:
         for field, field_info in model.model_fields.items():
             field_annotation = field_info.annotation
-            if get_origin(field_annotation) is list:
+            if _is_list_type(field_annotation):
                 if field in tool_args and isinstance(tool_args[field], str):
-                    tool_args[field] = json.loads(tool_args[field])
+                    tool_args[field] = split_string_to_list(tool_args[field])
                     soft_errors.append(f"Fixed JSON decode error for field {field}")
 
     model_instance = model(**tool_args)
@@ -146,7 +157,7 @@ def process_response(response: ChatCompletion, functions: list[Union[Callable, L
         list[ToolResult]: A list of ToolResult objects, each representing the outcome of a processed tool call.
     """
     message = response.choices[choice_num].message
-    return process_message(message, functions)
+    return process_message(message, functions, **kwargs)
 
 def process_message(
     message: ChatCompletionMessage,
