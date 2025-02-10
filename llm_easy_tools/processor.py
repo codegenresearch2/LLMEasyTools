@@ -8,7 +8,8 @@ from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_
 from llm_easy_tools.types import ChatCompletion, ChatCompletionMessageToolCall, ChatCompletionMessage
 
 class NoMatchingTool(Exception):
-    pass
+    def __init__(self, message: str):
+        super().__init__(message)
 
 @dataclass
 class ToolResult:
@@ -23,8 +24,8 @@ class ToolResult:
     tool: Optional[Union[Callable, BaseModel]] = None
 
     def to_message(self) -> dict[str, str]:
-        content = str(self.error) if self.error else '' if self.output is None else str(self.output)
-        return {"role": "tool", "tool_call_id": self.tool_call_id, "name": self.name, "content": content}
+        content = str(self.error) if self.error else '' if self.output is None else str(self.output) if not isinstance(self.output, BaseModel) else f'{self.name} created'
+        return {'role': 'tool', 'tool_call_id': self.tool_call_id, 'name': self.name, 'content': content}
 
 def process_tool_call(tool_call: ChatCompletionMessageToolCall, functions_or_models: list[Union[Callable, BaseModel]], prefix_class=None, fix_json_args=True, case_insensitive=False) -> ToolResult:
     function_call = tool_call.function
@@ -59,7 +60,7 @@ def process_tool_call(tool_call: ChatCompletionMessageToolCall, functions_or_mod
             error = e
             stack_trace = traceback.format_exc()
     else:
-        error = NoMatchingTool(f"Function {tool_name} not found")
+        error = NoMatchingTool(f'Function {tool_name} not found')
 
     return ToolResult(tool_call_id=tool_call.id, name=tool_name, arguments=tool_args, output=output, error=error, stack_trace=stack_trace, soft_errors=soft_errors, prefix=prefix, tool=tool)
 
@@ -69,9 +70,13 @@ def _process_unpacked(function, tool_args={}, fix_json_args=True):
 
     if fix_json_args:
         for field, field_info in model.model_fields.items():
-            if _is_list_type(field_info.annotation) and isinstance(tool_args.get(field), str):
-                tool_args[field] = json.loads(tool_args[field])
-                soft_errors.append(f"Fixed JSON decode error for field {field}")
+            if _is_list_type(field_info.annotation):
+                if isinstance(tool_args.get(field), str):
+                    try:
+                        tool_args[field] = json.loads(tool_args[field])
+                    except json.JSONDecodeError:
+                        tool_args[field] = [item.strip() for item in tool_args[field].split(',')]
+                        soft_errors.append(f'Fixed string to list conversion for field {field}')
 
     model_instance = model(**tool_args)
     args = {field: getattr(model_instance, field) for field in model.model_fields}
