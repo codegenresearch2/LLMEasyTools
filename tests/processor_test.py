@@ -7,13 +7,14 @@ from llm_easy_tools.processor import process_response, process_tool_call, ToolRe
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Optional
+import time
 
 def mk_tool_call(name, args):
     arguments = json.dumps(args)
     return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=arguments), type='function')
 
-def mk_tool_call_jason(name, args):
-    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=args), type='function')
+def mk_tool_call_json(name, args):
+    return SimpleToolCall(id='A', function=SimpleFunction(name=name, arguments=json.dumps(args)), type='function')
 
 def mk_chat_completion(tool_calls):
     return SimpleCompletion(
@@ -106,7 +107,7 @@ def test_json_fix():
     json_data = json.dumps(original_user.model_dump())
     json_data = json_data[:-1]
     json_data = json_data + ',}'
-    tool_call = mk_tool_call_jason("UserDetail", json_data)
+    tool_call = mk_tool_call_json("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
     assert result.output == original_user
     assert len(result.soft_errors) > 0
@@ -155,7 +156,6 @@ def test_parallel_tools():
 
         def increment_counter(self):
             self.counter += 1
-            import time
             time.sleep(1)  # Increased sleep duration to 1 second
 
     counter = CounterClass()
@@ -163,10 +163,13 @@ def test_parallel_tools():
     response = mk_chat_completion([tool_call] * 10)
 
     executor = ThreadPoolExecutor()
+    start_time = time.time()
     results = process_response(response, [counter.increment_counter], executor=executor)
+    end_time = time.time()
 
     assert results[9].error is None
     assert counter.counter == 10
+    assert end_time - start_time <= 3  # Ensure the processing time is within expected limits
 
 def test_process_one_tool_call():
     class User(BaseModel):
