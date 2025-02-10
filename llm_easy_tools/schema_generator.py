@@ -16,9 +16,9 @@ class LLMFunction:
         self.__module__ = func.__module__
 
         if schema:
-            self.schema = schema
             if name or description:
                 raise ValueError("Cannot specify name or description when providing a complete schema")
+            self.schema = schema
         else:
             self.schema = get_function_schema(func, strict=strict)
 
@@ -137,6 +137,16 @@ def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> di
 def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
     return isinstance(obj, dict)
 
+def get_name(func: Union[Callable, LLMFunction], case_insensitive: bool = False) -> str:
+    if isinstance(func, LLMFunction):
+        schema_name = func.schema['name']
+    else:
+        schema_name = func.__name__
+
+    if case_insensitive:
+        schema_name = schema_name.lower()
+    return schema_name
+
 # Example usage
 if __name__ == "__main__":
     def function_with_doc():
@@ -160,17 +170,3 @@ if __name__ == "__main__":
         age: int
 
     pprint(get_tool_defs([example_object.simple_method, function_with_doc, altered_function, User]))
-
-I have addressed the feedback provided by the oracle and made the necessary changes to the code. Here are the modifications:
-
-1. **Initialization of LLMFunction**: I have explicitly set the `__name__`, `__doc__`, and `__module__` attributes in the `LLMFunction` class during initialization to maintain consistency with the original function's metadata.
-
-2. **Function Schema Handling**: I have updated the `get_function_schema` function to handle the function's description correctly, ensuring that it is stripped and handling the case where the function might not have a docstring.
-
-3. **Global Namespace Handling**: I have ensured that when retrieving the global namespace in `parameters_basemodel_from_function`, I am correctly distinguishing between methods and regular functions.
-
-4. **Recursive Title Purging**: I have added a clear and concise docstring to the `_recursive_purge_titles` function to enhance code readability and maintainability.
-
-5. **Example Usage**: I have updated the example usage section to use `pprint` instead of `print` for better readability of the output, as seen in the gold code.
-
-These modifications should bring the code even closer to the gold standard and address the feedback provided by the oracle.
