@@ -1,6 +1,6 @@
 import pytest
-from typing import List, Optional, Union
-from pydantic import BaseModel, Field
+from typing import List, Optional, Union, Annotated
+from pydantic import BaseModel, Field, field_validator
 from llm_easy_tools import get_function_schema, LLMFunction
 from llm_easy_tools.schema_generator import parameters_basemodel_from_function, get_tool_defs
 from pprint import pprint
@@ -9,10 +9,7 @@ def simple_function(count: int, size: Optional[float] = None):
     """simple function does something"""
     pass
 
-def simple_function_no_docstring(apple: str, banana: str):
-    """
-    This function takes two parameters, apple and banana, with descriptions.
-    """
+def simple_function_no_docstring(apple: Annotated[str, "The apple"], banana: Annotated[str, "The banana"]):
     pass
 
 class Foo(BaseModel):
@@ -67,6 +64,24 @@ def test_noparams():
     assert result['parameters']['properties'] == {}
 
 def test_nested():
+    class Foo(BaseModel):
+        count: int
+        size: Optional[float] = None
+
+    class Bar(BaseModel):
+        apple: str = Field(description="The apple")
+        banana: str = Field(description="The banana")
+
+    class FooAndBar(BaseModel):
+        foo: Foo
+        bar: Bar
+
+    def nested_structure_function(foo: Foo, bars: List[Bar]):
+        """
+        This function takes a Foo object and a list of Bar objects, and it spams everything.
+        """
+        pass
+
     function_schema = get_function_schema(nested_structure_function)
     assert function_schema['name'] == 'nested_structure_function'
     assert function_schema['description'] == 'This function takes a Foo object and a list of Bar objects, and it spams everything.'
