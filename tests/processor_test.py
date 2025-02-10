@@ -57,6 +57,7 @@ def test_process_methods(tool_name, args, expected_output):
     tool_call = mk_tool_call(tool_name, args)
     result = process_tool_call(tool_call, [getattr(tool, tool_name)])
     
+    assert isinstance(result, ToolResult)
     if result.error:
         assert str(result.error) == expected_output
     else:
@@ -83,6 +84,7 @@ def test_process_complex():
 
     tool_call = mk_tool_call("print_companies", {"companies": company_list})
     result = process_tool_call(tool_call, [print_companies])
+    assert isinstance(result, ToolResult)
     assert isinstance(result.output, list)
     assert isinstance(result.output[0], Company)
 
@@ -106,6 +108,7 @@ def test_json_fix():
     json_data = json_data + ',}'
     tool_call = mk_tool_call_jason("UserDetail", json_data)
     result = process_tool_call(tool_call, [UserDetail])
+    assert isinstance(result, ToolResult)
     assert result.output == original_user
     assert len(result.soft_errors) > 0
 
@@ -114,6 +117,7 @@ def test_json_fix():
 
     response = mk_chat_completion([tool_call])
     results = process_response(response, [UserDetail])
+    assert isinstance(results[0], ToolResult)
     assert results[0].output == original_user
     assert len(results[0].soft_errors) > 0
 
@@ -126,11 +130,13 @@ def test_list_in_string_fix():
 
     tool_call = mk_tool_call("User", {"names": "John, Doe"})
     result = process_tool_call(tool_call, [User])
+    assert isinstance(result, ToolResult)
     assert result.output.names == ["John", "Doe"]
     assert len(result.soft_errors) > 0
 
     tool_call = mk_tool_call("User", {"names": "[\"John\", \"Doe\"]"})
     result = process_tool_call(tool_call, [User])
+    assert isinstance(result, ToolResult)
     assert result.output.names == ["John", "Doe"]
     assert len(result.soft_errors) > 0
 
@@ -144,6 +150,7 @@ def test_case_insensitivity():
 
     response = mk_chat_completion([mk_tool_call("user", {"name": "John", "city": "Metropolis"})])
     results = process_response(response, [User], case_insensitive=True)
+    assert isinstance(results[0], ToolResult)
     assert results[0].output == User(name="John", city="Metropolis")
 
 def test_parallel_tools():
@@ -164,6 +171,7 @@ def test_parallel_tools():
     results = process_response(response, [counter.increment_counter], executor=executor)
     end_time = time()
 
+    assert isinstance(results[9], ToolResult)
     assert results[9].error is None
 
     time_taken = end_time - start_time
