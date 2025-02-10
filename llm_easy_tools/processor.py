@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, Union, Callable
+from typing import List, Optional, Union, Callable, Any
 from pydantic import BaseModel
 from llm_easy_tools.schema_generator import get_name, parameters_basemodel_from_function, LLMFunction
 from llm_easy_tools.types import Function, ChatCompletionMessageToolCall, ChatCompletionMessage, ChatCompletion
@@ -9,15 +9,17 @@ class NoMatchingTool(Exception):
         self.message = message
         super().__init__(self.message)
 
+from dataclasses import dataclass
+
+@dataclass
 class ToolResult:
-    def __init__(self, tool_call_id: str, name: str, output: Optional[Union[str, BaseModel]] = None, error: Optional[Exception] = None, soft_errors: List[Exception] = [], prefix: Optional[BaseModel] = None, tool: Optional[Union[Callable, BaseModel]] = None):
-        self.tool_call_id = tool_call_id
-        self.name = name
-        self.output = output
-        self.error = error
-        self.soft_errors = soft_errors
-        self.prefix = prefix
-        self.tool = tool
+    tool_call_id: str
+    name: str
+    output: Optional[Union[str, BaseModel]] = None
+    error: Optional[Exception] = None
+    soft_errors: List[Exception] = None
+    prefix: Optional[BaseModel] = None
+    tool: Optional[Union[Callable, BaseModel]] = None
 
     def to_message(self) -> dict:
         if self.error is not None:
@@ -90,7 +92,7 @@ def _process_unpacked(function, tool_args: dict = {}, fix_json_args: bool = True
         args[field] = getattr(model_instance, field)
     return function(**args), soft_errors
 
-def process_response(response: ChatCompletion, functions: List[Union[Callable, LLMFunction]], choice_num: int = 0, **kwargs) -> List[ToolResult]:
+def process_response(response, functions: List[Union[Callable, LLMFunction]], choice_num: int = 0, **kwargs) -> List[ToolResult]:
     message = response.choices[choice_num].message
     return process_message(message, functions, **kwargs)
 
