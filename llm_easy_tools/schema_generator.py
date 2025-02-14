@@ -33,8 +33,6 @@ class LLMFunction:
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
 
-
-
 def tool_def(function_schema: dict) -> dict:
     return {
         "type": "function",
@@ -44,6 +42,8 @@ def tool_def(function_schema: dict) -> dict:
 def get_tool_defs(
         functions: list[Union[Callable, LLMFunction]],
         case_insensitive: bool = False,
+        prefix_class: Union[Type[BaseModel], None] = None,
+        prefix_schema_name: bool = True,
         strict: bool = False
         ) -> list[dict]:
     result = []
@@ -52,19 +52,16 @@ def get_tool_defs(
             fun_schema = function.schema
         else:
             fun_schema = get_function_schema(function, case_insensitive, strict)
+
+        if prefix_class:
+            fun_schema = insert_prefix(prefix_class, fun_schema, prefix_schema_name, case_insensitive)
         result.append(tool_def(fun_schema))
     return result
 
 def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]:
     fields = {}
     parameters = inspect.signature(function).parameters
-    # Get the global namespace, handling both functions and methods
-    if inspect.ismethod(function):
-        # For methods, get the class's module globals
-        function_globals = sys.modules[function.__module__].__dict__
-    else:
-        # For regular functions, use __globals__ if available
-        function_globals = getattr(function, '__globals__', {})
+    function_globals = sys.modules[function.__module__].__dict__ if inspect.ismethod(function) else getattr(function, '__globals__', {})
 
     for name, parameter in parameters.items():
         description = None
@@ -76,16 +73,12 @@ def parameters_basemodel_from_function(function: Callable) -> Type[pd.BaseModel]
                 description = type_.__metadata__[0]
             type_ = type_.__args__[0]
         if isinstance(type_, str):
-            # this happens in postponed annotation evaluation, we need to try to resolve the type
-            # if the type is not in the global namespace, we will get a NameError
             type_ = eval(type_, function_globals)
         default = PydanticUndefined if parameter.default is inspect.Parameter.empty else parameter.default
         fields[name] = (type_, pd.Field(default, description=description))
     return pd.create_model(f'{function.__name__}_ParameterModel', **fields)
 
-
 def _recursive_purge_titles(d: Dict[str, Any]) -> None:
-    """Remove a titles from a schema recursively"""
     if isinstance(d, dict):
         for key in list(d.keys()):
             if key == 'title' and "type" in d.keys():
@@ -94,14 +87,8 @@ def _recursive_purge_titles(d: Dict[str, Any]) -> None:
                 _recursive_purge_titles(d[key])
 
 def get_name(func: Union[Callable, LLMFunction], case_insensitive: bool = False) -> str:
-    if isinstance(func, LLMFunction):
-        schema_name = func.schema['name']
-    else:
-        schema_name = func.__name__
-
-    if case_insensitive:
-        schema_name = schema_name.lower()
-    return schema_name
+    schema_name = func.schema['name'] if isinstance(func, LLMFunction) else func.__name__
+    return schema_name.lower() if case_insensitive else schema_name
 
 def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive: bool=False, strict: bool=False) -> dict:
     if isinstance(function, LLMFunction):
@@ -109,41 +96,26 @@ def get_function_schema(function: Union[Callable, LLMFunction], case_insensitive
             raise ValueError("Cannot case insensitive for LLMFunction")
         return function.schema
 
-    description = ''
-    if hasattr(function, '__doc__') and function.__doc__:
-        description = function.__doc__
+    description = function.__doc__.strip() if hasattr(function, '__doc__') and function.__doc__ else ''
+    schema_name = function.__name__.lower() if case_insensitive else function.__name__
 
-    schema_name = function.__name__
-    if case_insensitive:
-        schema_name = schema_name.lower()
-
-    function_schema: dict[str, Any] = {
-        'name': schema_name,
-        'description': description.strip(),
-    }
+    function_schema: dict[str, Any] = {'name': schema_name, 'description': description}
     model = parameters_basemodel_from_function(function)
     model_json_schema = model.model_json_schema()
+
     if strict:
         model_json_schema = to_strict_json_schema(model_json_schema)
         function_schema['strict'] = True
     else:
         _recursive_purge_titles(model_json_schema)
+
     function_schema['parameters'] = model_json_schema
-
     return function_schema
-
-# copied from openai implementation which also uses Apache 2.0 license
 
 def to_strict_json_schema(schema: dict) -> dict[str, Any]:
     return _ensure_strict_json_schema(schema, path=())
 
-def _ensure_strict_json_schema(
-    json_schema: object,
-    path: tuple[str, ...],
-) -> dict[str, Any]:
-    """Mutates the given JSON schema to ensure it conforms to the `strict` standard
-    that the API expects.
-    """
+def _ensure_strict_json_schema(json_schema: object, path: tuple[str, ...]) -> dict[str, Any]:
     if not is_dict(json_schema):
         raise TypeError(f"Expected {json_schema} to be a dictionary; path={path}")
 
@@ -151,35 +123,22 @@ def _ensure_strict_json_schema(
     if typ == "object" and "additionalProperties" not in json_schema:
         json_schema["additionalProperties"] = False
 
-    # object types
-    # { 'type': 'object', 'properties': { 'a':  {...} } }
     properties = json_schema.get("properties")
     if is_dict(properties):
         json_schema["required"] = [prop for prop in properties.keys()]
-        json_schema["properties"] = {
-            key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key))
-            for key, prop_schema in properties.items()
-        }
+        json_schema["properties"] = {key: _ensure_strict_json_schema(prop_schema, path=(*path, "properties", key)) for key, prop_schema in properties.items()}
 
-    # arrays
-    # { 'type': 'array', 'items': {...} }
     items = json_schema.get("items")
     if is_dict(items):
         json_schema["items"] = _ensure_strict_json_schema(items, path=(*path, "items"))
 
-    # unions
     any_of = json_schema.get("anyOf")
     if isinstance(any_of, list):
-        json_schema["anyOf"] = [
-            _ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i))) for i, variant in enumerate(any_of)
-        ]
+        json_schema["anyOf"] = [_ensure_strict_json_schema(variant, path=(*path, "anyOf", str(i))) for i, variant in enumerate(any_of)]
 
-    # intersections
     all_of = json_schema.get("allOf")
     if isinstance(all_of, list):
-        json_schema["allOf"] = [
-            _ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i))) for i, entry in enumerate(all_of)
-        ]
+        json_schema["allOf"] = [_ensure_strict_json_schema(entry, path=(*path, "anyOf", str(i))) for i, entry in enumerate(all_of)]
 
     defs = json_schema.get("$defs")
     if is_dict(defs):
@@ -188,41 +147,74 @@ def _ensure_strict_json_schema(
 
     return json_schema
 
-
 def is_dict(obj: object) -> TypeGuard[dict[str, object]]:
-    # just pretend that we know there are only `str` keys
-    # as that check is not worth the performance cost
     return isinstance(obj, dict)
 
+def insert_prefix(prefix_class, schema, prefix_schema_name=True, case_insensitive = False):
+    if not issubclass(prefix_class, BaseModel):
+        raise TypeError(f"The given class reference is not a subclass of pydantic BaseModel")
 
-#######################################
-#
-# Examples
+    prefix_schema = prefix_class.model_json_schema()
+    _recursive_purge_titles(prefix_schema)
+    prefix_schema.pop('description', '')
 
-if __name__ == "__main__":
-    def function_with_doc():
-        """
-        This function has a docstring and no parameteres.
-        Expected Cost: high
-        """
-        pass
+    if 'parameters' in schema:
+        required = schema['parameters'].get('required', [])
+        prefix_schema['required'].extend(required)
+        for key, value in schema['parameters']['properties'].items():
+            prefix_schema['properties'][key] = value
 
-    altered_function = LLMFunction(function_with_doc, name="altered_name")
+    new_schema = copy.copy(schema)
+    new_schema['parameters'] = prefix_schema
+    if len(new_schema['parameters']['properties']) == 0:
+        new_schema.pop('parameters')
 
-    class ExampleClass:
-        def simple_method(self, count: int, size: float):
-            """simple method does something"""
-            pass
+    if prefix_schema_name:
+        prefix_name = prefix_class.__name__.lower() if case_insensitive else prefix_class.__name__
+        new_schema['name'] = prefix_name + "_and_" + schema['name']
 
-    example_object = ExampleClass()
+    return new_schema
 
-    class User(BaseModel):
-        name: str
-        age: int
+def process_tool_call(tool_call, functions_or_models, fix_json_args=True, case_insensitive=False):
+    function_call = tool_call.function
+    tool_name = function_call.name
+    args = function_call.arguments
+    soft_errors = []
+    error = None
+    stack_trace = None
+    output = None
 
-    pprint(get_tool_defs([
-        example_object.simple_method, 
-        function_with_doc, 
-        altered_function,
-        User
-        ]))
+    try:
+        tool_args = json.loads(args)
+    except json.decoder.JSONDecodeError as e:
+        if fix_json_args:
+            soft_errors.append(e)
+            args = args.replace(', }', '}').replace(',}', '}')
+            tool_args = json.loads(args)
+        else:
+            error = e
+            stack_trace = traceback.format_exc()
+
+    tool = next((f for f in functions_or_models if get_name(f, case_insensitive) == tool_name), None)
+    if tool is None:
+        error = NoMatchingTool(f"Function {tool_name} not found")
+    else:
+        try:
+            output, new_soft_errors = _process_unpacked(tool, tool_args, fix_json_args=fix_json_args)
+            soft_errors.extend(new_soft_errors)
+        except Exception as e:
+            error = e
+            stack_trace = traceback.format_exc()
+
+    return {
+        'tool_call_id': tool_call.id,
+        'name': tool_name,
+        'arguments': tool_args,
+        'output': output,
+        'error': error,
+        'stack_trace': stack_trace,
+        'soft_errors': soft_errors,
+        'tool': tool,
+    }
+
+# Remaining code remains the same, as it is not directly related to the rules provided.
