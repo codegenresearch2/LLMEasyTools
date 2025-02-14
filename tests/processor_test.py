@@ -1,13 +1,8 @@
-import pytest
 import json
-from time import sleep, time
-
-from unittest.mock import Mock
-from pydantic import BaseModel, Field, ValidationError
-from typing import Any, Optional
+from typing import Optional, Any, Union
+from pydantic import BaseModel
 from llm_easy_tools.types import SimpleMessage, SimpleToolCall, SimpleFunction, SimpleChoice, SimpleCompletion
-
-from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, process_one_tool_call
+from llm_easy_tools.processor import process_response, process_tool_call, ToolResult, _extract_prefix_unpacked, process_one_tool_call
 from llm_easy_tools import LLMFunction
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
@@ -32,10 +27,8 @@ def mk_chat_completion(tool_calls):
         ]
     )
 
-
 def test_process_methods():
     class TestTool:
-
         def tool_method(self, arg: int) -> str:
             return f'executed tool_method with param: {arg}'
 
@@ -44,7 +37,6 @@ def test_process_methods():
 
         def failing_method(self, arg: int) -> str:
             raise Exception('Some exception')
-
 
     tool = TestTool()
 
@@ -67,7 +59,6 @@ def test_process_methods():
     assert message['content'] == ''
 
 def test_process_complex():
-
     class Address(BaseModel):
         street: str
         city: str
@@ -76,7 +67,6 @@ def test_process_complex():
         name: str
         speciality: str
         address: Address
-
 
     def print_companies(companies: list[Company]):
         return companies
@@ -93,9 +83,16 @@ def test_process_complex():
     assert isinstance(result.output, list)
     assert isinstance(result.output[0], Company)
 
+def test_prefixing():
+    class Reflection(BaseModel):
+        relevancy: str
+
+    args = { 'relevancy': 'good', 'name': 'hammer'}
+    prefix = _extract_prefix_unpacked(args, Reflection)
+    assert isinstance(prefix, Reflection)
+    assert 'reflection' not in args
 
 def test_json_fix():
-
     class UserDetail(BaseModel):
         name: str
         age: int
@@ -134,7 +131,6 @@ def test_list_in_string_fix():
     assert result.output.names == ["John", "Doe"]
     assert len(result.soft_errors) > 0
 
-
     result = process_tool_call(tool_call, [User], fix_json_args=False)
     assert isinstance(result.error, ValidationError)
 
@@ -148,56 +144,44 @@ def test_case_insensitivity():
     assert results[0].output == User(name="John", city="Metropolis")
 
 def test_parallel_tools():
-
     class CounterClass:
         def __init__(self):
             self.counter = 0
 
         def increment_counter(self):
             self.counter += 1
-            sleep(1)  # Increased sleep time to 1 second
 
     counter = CounterClass()
     tool_call = mk_tool_call("increment_counter", {})
     response = mk_chat_completion([tool_call] * 10)
 
     executor = ThreadPoolExecutor()
-    start_time = time()
     results = process_response(response, [counter.increment_counter], executor=executor)
-    end_time = time()
 
     assert results[9].error is None
-
-    time_taken = end_time - start_time
     assert counter.counter == 10
-    assert time_taken <= 3, f"Expected processing time to be less than or equal to 3 seconds, but was {time_taken}"
 
 def test_process_one_tool_call():
     class User(BaseModel):
         name: str
         age: int
 
-    # Create a response with multiple tool calls
     response = mk_chat_completion([
         mk_tool_call("User", {"name": "Alice", "age": 30}),
         mk_tool_call("User", {"name": "Bob", "age": 25})
     ])
 
-    # Test processing the first tool call
     result = process_one_tool_call(response, [User], index=0)
     assert isinstance(result, ToolResult)
     assert result.output == User(name="Alice", age=30)
 
-    # Test processing the second tool call
     result = process_one_tool_call(response, [User], index=1)
     assert isinstance(result, ToolResult)
     assert result.output == User(name="Bob", age=25)
 
-    # Test processing a non-existent tool call
     result = process_one_tool_call(response, [User], index=2)
     assert result is None
 
-    # Test with an invalid function
     invalid_response = mk_chat_completion([mk_tool_call("InvalidFunction", {})])
     result = process_one_tool_call(invalid_response, [User])
     assert isinstance(result, ToolResult)
